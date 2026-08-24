@@ -30,8 +30,15 @@
     pointer-events:none;overflow:visible
   }
   #guideRibbon{
-    fill:#168BFF;
-    fill-opacity:.6;
+    fill:url(#routeGradient);
+    filter:drop-shadow(0 2px 2px rgba(0,0,0,.20));
+  }
+  #guideHighlight{
+    fill:none;
+    stroke:rgba(255,255,255,.20);
+    stroke-width:2;
+    stroke-linecap:round;
+    pointer-events:none;
   }
 
   #arrowWrap{
@@ -77,10 +84,17 @@
   <div id="shade"></div>
 
   <svg id="guideLine" aria-hidden="true">
+    <defs>
+      <linearGradient id="routeGradient" x1="0" y1="1" x2="0" y2="0">
+        <stop id="routeStopNear" offset="0%" stop-color="#075BFF" stop-opacity=".62"></stop>
+        <stop id="routeStopFar" offset="100%" stop-color="#075BFF" stop-opacity=".42"></stop>
+      </linearGradient>
+    </defs>
     <path id="guideRibbon" d=""></path>
+    <path id="guideHighlight" d=""></path>
   </svg>
 
-  <div id="versionLabel">v1.3</div>
+  <div id="versionLabel">v1.5</div>
 
   <div id="status">
     <div class="pill" id="gpsStatus">GPS 대기</div>
@@ -110,6 +124,9 @@
   const debugBtn = document.getElementById('debugBtn');
   const arrowWrap = document.getElementById('arrowWrap');
   const guideRibbon = document.getElementById('guideRibbon');
+  const guideHighlight = document.getElementById('guideHighlight');
+  const routeStopNear = document.getElementById('routeStopNear');
+  const routeStopFar = document.getElementById('routeStopFar');
   const label = document.getElementById('label');
   const edge = document.getElementById('edge');
   const gpsStatus = document.getElementById('gpsStatus');
@@ -168,39 +185,54 @@
   }
 
   function setGuideRibbonEnd(x, y, angleDiff = 0){
-    const startX = window.innerWidth / 2;
-    const startY = window.innerHeight;
+    const W = window.innerWidth;
+    const H = window.innerHeight;
 
-    const startWidth = 150;
-    const endWidth = 30;
+    // 화면 하단 "아래"에서부터 경로가 솟아오르게 해
+    // 실제 바닥 평면에 놓여 카메라 원근으로 보이는 느낌을 만든다.
+    const startX = W / 2;
+    const startY = H + 105;
 
-    // 목표와의 방향 차이가 커질수록 곡률을 키운다.
-    // 시야각 30° 부근에서 가장 강하게 휘고, 중앙에서는 거의 직선이다.
-    const curveRatio = Math.max(-1, Math.min(1, angleDiff / 30));
-    const distanceY = Math.max(120, startY - y);
-    const curveStrength = Math.min(window.innerWidth * 0.42, distanceY * 0.55);
+    // 목표 화살표 밑쪽으로 연결.
+    const endX = x;
+    const endY = y + 46;
 
-    // 시작부는 화면 하단 중앙에서 약간 위쪽으로 뻗고,
-    // 중간 제어점이 좌/우로 이동하면서 바닥에 깔린 경로처럼 휜다.
-    const c1x = startX + curveRatio * curveStrength * 0.18;
-    const c1y = startY - distanceY * 0.28;
+    // 가까운 쪽은 넓고, 먼 쪽은 매우 좁게.
+    const startWidth = Math.min(220, W * 0.48);
+    const endWidth = 18;
 
-    const c2x = x - curveRatio * curveStrength * 0.58;
-    const c2y = y + distanceY * 0.34;
+    const signed = Math.max(-1, Math.min(1, angleDiff / 48));
+    const severity = Math.min(1, Math.abs(angleDiff) / 32);
+    const spanY = Math.max(220, startY - endY);
+
+    // 곡률은 각도에 선형으로 반응하지 않고 easing을 사용.
+    // 작은 오차에서는 거의 직진, 큰 오차에서 점진적으로 휘어진다.
+    const easedCurve = Math.sign(signed) * Math.pow(Math.abs(signed), 1.45);
+
+    // 시작부는 진행 방향을 거의 화면 중앙으로 유지해
+    // 발밑에 놓인 경로처럼 보이게 한다.
+    const c1x = startX + easedCurve * W * 0.018;
+    const c1y = startY - spanY * 0.37;
+
+    // 중후반부에서만 목표 쪽으로 유도.
+    // 과도한 활 모양 대신 자연스러운 도로 곡선을 만든다.
+    const c2x = endX - easedCurve * W * 0.12;
+    const c2y = endY + spanY * 0.38;
 
     function bezierPoint(t){
       const mt = 1 - t;
-      const px =
-        mt*mt*mt*startX +
-        3*mt*mt*t*c1x +
-        3*mt*t*t*c2x +
-        t*t*t*x;
-      const py =
-        mt*mt*mt*startY +
-        3*mt*mt*t*c1y +
-        3*mt*t*t*c2y +
-        t*t*t*y;
-      return {x:px, y:py};
+      return {
+        x:
+          mt*mt*mt*startX +
+          3*mt*mt*t*c1x +
+          3*mt*t*t*c2x +
+          t*t*t*endX,
+        y:
+          mt*mt*mt*startY +
+          3*mt*mt*t*c1y +
+          3*mt*t*t*c2y +
+          t*t*t*endY
+      };
     }
 
     function bezierTangent(t){
@@ -208,48 +240,64 @@
       const dx =
         3*mt*mt*(c1x-startX) +
         6*mt*t*(c2x-c1x) +
-        3*t*t*(x-c2x);
+        3*t*t*(endX-c2x);
       const dy =
         3*mt*mt*(c1y-startY) +
         6*mt*t*(c2y-c1y) +
-        3*t*t*(y-c2y);
+        3*t*t*(endY-c2y);
       const len = Math.hypot(dx,dy) || 1;
       return {x:dx/len, y:dy/len};
     }
 
     const left = [];
     const right = [];
-    const steps = 24;
+    const center = [];
+    const steps = 44;
 
     for(let i=0;i<=steps;i++){
       const t = i / steps;
       const p = bezierPoint(t);
-      const tangent = bezierTangent(t);
+      const tan = bezierTangent(t);
 
-      // 진행 방향에 수직인 벡터
-      const nx = -tangent.y;
-      const ny = tangent.x;
+      // 진행 방향에 수직.
+      const nx = -tan.y;
+      const ny = tan.x;
 
-      // 150px -> 30px로 원근 축소.
-      // 멀어질수록 조금 더 빠르게 좁혀져 바닥에 눕혀진 효과를 강화한다.
-      const perspectiveT = Math.pow(t, 0.72);
-      const width = startWidth + (endWidth - startWidth) * perspectiveT;
+      // 바닥 원근: 가까운 25%에서 폭이 크게 줄고
+      // 이후에는 먼 거리에서 천천히 수렴한다.
+      const perspective = 1 - Math.pow(1 - t, 2.25);
+      const width = startWidth + (endWidth - startWidth) * perspective;
       const half = width / 2;
 
       left.push([p.x + nx*half, p.y + ny*half]);
       right.push([p.x - nx*half, p.y - ny*half]);
+      center.push([p.x, p.y]);
     }
 
     let d = `M ${left[0][0]} ${left[0][1]}`;
-    for(let i=1;i<left.length;i++){
-      d += ` L ${left[i][0]} ${left[i][1]}`;
-    }
-    for(let i=right.length-1;i>=0;i--){
-      d += ` L ${right[i][0]} ${right[i][1]}`;
-    }
+    for(let i=1;i<left.length;i++) d += ` L ${left[i][0]} ${left[i][1]}`;
+    for(let i=right.length-1;i>=0;i--) d += ` L ${right[i][0]} ${right[i][1]}`;
     d += ' Z';
-
     guideRibbon.setAttribute('d', d);
+
+    // 아주 얇은 중앙 반사선으로 HUD/도로 느낌을 추가.
+    let centerD = `M ${center[0][0]} ${center[0][1]}`;
+    for(let i=1;i<center.length;i++) centerD += ` L ${center[i][0]} ${center[i][1]}`;
+    guideHighlight.setAttribute('d', centerD);
+
+    // 직진에 가까울수록 진한 파랑, 커브가 커질수록 주황.
+    // HSL 보간: blue(215deg) -> orange(30deg)
+    const hue = 215 + (30 - 215) * Math.pow(severity, 0.82);
+    const sat = 96;
+    const lightNear = 48 + 4 * severity;
+    const lightFar = 55 + 2 * severity;
+
+    routeStopNear.setAttribute('stop-color', `hsl(${hue} ${sat}% ${lightNear}%)`);
+    routeStopFar.setAttribute('stop-color', `hsl(${hue} ${sat}% ${lightFar}%)`);
+
+    // 직진일수록 더 선명하고, 심한 곡선은 색은 주황으로 바뀌되 약간 투명하게.
+    routeStopNear.setAttribute('stop-opacity', String(0.68 - 0.10 * severity));
+    routeStopFar.setAttribute('stop-opacity', String(0.48 - 0.08 * severity));
   }
 
   function render(){
