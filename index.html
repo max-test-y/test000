@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-<title>AR Navigation v2.0</title>
+<title>AR Navigation v3.0</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
@@ -54,34 +54,18 @@
     overflow: visible;
   }
   #routeShadow {
-    fill: rgba(0,0,0,.14);
-    filter: blur(3px);
+    fill: rgba(0,0,0,.22);
+    filter: blur(4px);
   }
   #routeRibbon {
     fill: url(#routeFill);
-    filter: drop-shadow(0 3px 3px rgba(0,0,0,.17));
+    filter: drop-shadow(0 2px 3px rgba(0,0,0,.22));
   }
-  #routeCore {
+  #routeRim {
     fill: none;
-    stroke: rgba(255,255,255,.14);
+    stroke: rgba(220,242,255,.55);
     stroke-width: 2;
     stroke-linecap: round;
-  }
-  #routeArrow {
-    fill: url(#arrowFill);
-    filter: drop-shadow(0 2px 3px rgba(0,0,0,.18));
-  }
-  #routeEndHalo{
-    fill:rgba(77,171,255,.18);
-    stroke:rgba(190,230,255,.65);
-    stroke-width:2;
-    filter:drop-shadow(0 2px 3px rgba(0,0,0,.18));
-  }
-  #routeEndDot{
-    fill:#d9f1ff;
-    stroke:#2f8fff;
-    stroke-width:4;
-    filter:drop-shadow(0 2px 3px rgba(0,0,0,.20));
   }
 
   #topStatus {
@@ -112,27 +96,41 @@
   #versionLabel { justify-self: center; }
   #headingStatus { justify-self: end; }
 
-  #targetMarker {
-    display:none !important;
+  /* 하단 HUD: 속도 + 오렌지 핀 + 거리 (레퍼런스 스타일) */
+  #bottomHud {
+    position: absolute;
+    z-index: 9;
+    left: 18px;
+    bottom: max(96px, calc(env(safe-area-inset-bottom) + 96px));
+    display: flex;
+    align-items: flex-end;
+    gap: 14px;
+    pointer-events: none;
+    text-shadow: 0 2px 6px rgba(0,0,0,.55);
   }
-  #targetDot {
-    width: 12px;
-    height: 12px;
-    border: 3px solid white;
-    border-radius: 50%;
-    background: rgba(15,95,255,.82);
-    box-shadow: 0 2px 8px rgba(0,0,0,.55);
-  }
-  #targetLabel {
-    padding: 6px 9px;
-    border-radius: 999px;
+  #speedValue {
     color: #fff;
+    font-size: 44px;
+    font-weight: 800;
+    line-height: .82;
+    letter-spacing: -.5px;
+  }
+  #speedUnit {
+    color: rgba(255,255,255,.85);
     font-size: 13px;
     font-weight: 700;
-    white-space: nowrap;
-    background: rgba(0,0,0,.47);
-    border: 1px solid rgba(255,255,255,.14);
-    backdrop-filter: blur(8px);
+    margin-top: 2px;
+  }
+  #speedBlock { display: flex; flex-direction: column; align-items: flex-start; }
+  #distBlock { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  #distPin {
+    width: 22px;
+    height: 26px;
+  }
+  #distValue {
+    color: #ffb04d;
+    font-size: 15px;
+    font-weight: 800;
   }
 
   #edgeHint {
@@ -206,33 +204,37 @@
 
   <svg id="routeSvg" aria-hidden="true">
     <defs>
-      <linearGradient id="routeFill" x1="0" y1="1" x2="0" y2="0">
-        <stop offset="0%" stop-color="#126DFF" stop-opacity=".72"></stop>
-        <stop offset="58%" stop-color="#43A4FF" stop-opacity=".64"></stop>
-        <stop offset="100%" stop-color="#8AD2FF" stop-opacity=".72"></stop>
-      </linearGradient>
-      <linearGradient id="arrowFill" x1="0" y1="1" x2="0" y2="0">
-        <stop offset="0%" stop-color="#3F9CFF" stop-opacity=".74"></stop>
-        <stop offset="100%" stop-color="#A3DEFF" stop-opacity=".88"></stop>
+      <!-- 좌(밝은 하늘색) → 우(짙은 네이비) 2톤 셰이딩. 실제 3D가 아니라
+           평평한 색상만으로 입체감을 주는 트릭 (레퍼런스와 동일한 방식) -->
+      <linearGradient id="routeFill" x1="0%" y1="0%" x2="100%" y2="0%">
+        <stop offset="0%"  stop-color="#8fd8ff" stop-opacity=".95"></stop>
+        <stop offset="46%" stop-color="#2f8dff" stop-opacity=".95"></stop>
+        <stop offset="100%" stop-color="#0b3f9e" stop-opacity=".95"></stop>
       </linearGradient>
     </defs>
     <path id="routeShadow"></path>
     <path id="routeRibbon"></path>
-    <path id="routeCore"></path>
-    <path id="routeArrow"></path>
-    <circle id="routeEndHalo" r="22"></circle>
-    <circle id="routeEndDot" r="8"></circle>
+    <path id="routeRim"></path>
   </svg>
 
   <div id="topStatus">
     <div class="pill" id="gpsStatus">GPS 대기</div>
-    <div class="pill" id="versionLabel">v2.1</div>
+    <div class="pill" id="versionLabel">v3.0</div>
     <div class="pill" id="headingStatus">방향 대기</div>
   </div>
 
-  <div id="targetMarker">
-    <div id="targetDot"></div>
-    <div id="targetLabel">목표</div>
+  <div id="bottomHud">
+    <div id="speedBlock">
+      <div id="speedValue">--</div>
+      <div id="speedUnit">km/h</div>
+    </div>
+    <div id="distBlock">
+      <svg id="distPin" viewBox="0 0 24 28">
+        <path d="M12 0C5.4 0 0 5.3 0 11.8 0 20.5 12 28 12 28s12-7.5 12-16.2C24 5.3 18.6 0 12 0z" fill="#ff8a1e"></path>
+        <path d="M12 2.6c-5.1 0-9.2 4.1-9.2 9.2 0 6.8 9.2 13.2 9.2 13.2s9.2-6.4 9.2-13.2c0-5.1-4.1-9.2-9.2-9.2z" fill="#ffab52"></path>
+      </svg>
+      <div id="distValue">-</div>
+    </div>
   </div>
 
   <div id="edgeHint"></div>
@@ -255,13 +257,10 @@
   const camera = document.getElementById('camera');
   const routeRibbon = document.getElementById('routeRibbon');
   const routeShadow = document.getElementById('routeShadow');
-  const routeCore = document.getElementById('routeCore');
-  const routeArrow = document.getElementById('routeArrow');
-  const routeEndHalo = document.getElementById('routeEndHalo');
-  const routeEndDot = document.getElementById('routeEndDot');
+  const routeRim = document.getElementById('routeRim');
 
-  const targetMarker = document.getElementById('targetMarker');
-  const targetLabel = document.getElementById('targetLabel');
+  const speedValue = document.getElementById('speedValue');
+  const distValue = document.getElementById('distValue');
   const edgeHint = document.getElementById('edgeHint');
 
   const gpsStatus = document.getElementById('gpsStatus');
@@ -271,6 +270,7 @@
   const debugBtn = document.getElementById('debugBtn');
 
   let currentPos = null;
+  let currentSpeed = null; // m/s, GPS가 제공할 때만
   let targetBearing = null;
   let targetDistance = null;
 
@@ -281,6 +281,8 @@
   let filteredHeading = null;
   let visualDiff = 0;
   let desiredDiff = 0;
+  let alignedLock = false;
+  let previousRawDiff = null;
 
   let rafId = null;
   let started = false;
@@ -311,9 +313,9 @@
   }
 
   function formatDistance(m){
-    if(m == null) return '';
-    if(m < 1000) return `${Math.round(m).toLocaleString()} m`;
-    return `${(m/1000).toFixed(1)} km`;
+    if(m == null) return '-';
+    if(m < 1000) return `${Math.round(m).toLocaleString()}m`;
+    return `${(m/1000).toFixed(1)}km`;
   }
 
   function updateTargetFromGps(){
@@ -329,7 +331,7 @@
       TARGET.lat, TARGET.lon
     );
 
-    targetLabel.textContent = `목표 ${formatDistance(targetDistance)}`;
+    distValue.textContent = formatDistance(targetDistance);
   }
 
   function ingestHeading(newHeading){
@@ -342,17 +344,18 @@
       return;
     }
 
-    const delta = norm180(rawHeading - filteredHeading);
+    const delta = norm180(rawHeading-filteredHeading);
 
-    // 0.8도 이하는 사실상 정지로 취급.
-    if(Math.abs(delta) < 0.8) return;
+    // 정지 상태의 작은 센서 떨림만 제거한다.
+    if(Math.abs(delta) < 0.65) return;
 
-    // 센서가 크게 움직이면 따라가고, 작은 흔들림은 강하게 억제.
+    // 회전 중에는 지연이 생기지 않도록 훨씬 빠르게 따라간다.
     const alpha =
-      Math.abs(delta) > 35 ? 0.18 :
-      Math.abs(delta) > 15 ? 0.115 :
-      Math.abs(delta) > 6  ? 0.075 :
-                             0.045;
+      Math.abs(delta) > 35 ? 0.48 :
+      Math.abs(delta) > 18 ? 0.38 :
+      Math.abs(delta) > 8  ? 0.28 :
+      Math.abs(delta) > 3  ? 0.18 :
+                             0.10;
 
     filteredHeading = norm360(filteredHeading + delta*alpha);
   }
@@ -363,225 +366,250 @@
     if(typeof e.webkitCompassHeading === 'number'){
       h = e.webkitCompassHeading;
     }else if(typeof e.alpha === 'number'){
-      h = 360 - e.alpha;
+      const screenAngle =
+        (screen.orientation && typeof screen.orientation.angle === 'number')
+          ? screen.orientation.angle
+          : (typeof window.orientation === 'number' ? window.orientation : 0);
+
+      h = norm360(360 - e.alpha + screenAngle);
     }
 
     if(h != null) ingestHeading(h);
   }
 
+  // 레퍼런스처럼 리본 하나가 화살촉처럼 끝까지 뾰족하게 이어지는 형태.
+  // 별도의 화살표 머리/네크 조각을 붙이지 않고, 폭 보간만으로 표현한다.
   function buildRoute(diff){
     const W = window.innerWidth;
     const H = window.innerHeight;
 
-    // 바닥에 "붙어 있는" 느낌을 위해 시작점을 화면 아래쪽으로 더 내리고,
-    // 먼 쪽 종점을 수평선보다 낮게 둔다.
-    const start = { x: W*0.50, y: H + 150 };
-    const endY = H*0.50;
-
-    const halfFov = H_FOV/2;
-
-    // 화면 내 목표 X. 화면 밖 방향도 끝점은 edge 안쪽에 유지.
-    const visibleRatio = clamp(diff/halfFov, -1.25, 1.25);
-    const endX = W*0.50 + visibleRatio*(W*0.35);
-    const end = { x:endX, y:endY };
-
+    const start = { x:W*0.50, y:H+150 };
     const absDeg = Math.min(180, Math.abs(diff));
     const sign = diff >= 0 ? 1 : -1;
 
-    // 각도별 곡률을 명확하게 구분:
-    // 0~15°: 거의 직선
-    // 15~45°: 완만
-    // 45~90°: 강한 회전
-    // 90~180°: 매우 강한 hook/U-turn 느낌
-    let curve;
-    if(absDeg <= 15){
-      curve = (absDeg/15) * 0.08;
-    }else if(absDeg <= 45){
-      const t = (absDeg-15)/30;
-      curve = 0.08 + 0.22*Math.pow(t,1.15);
-    }else if(absDeg <= 90){
-      const t = (absDeg-45)/45;
-      curve = 0.30 + 0.34*Math.pow(t,1.08);
-    }else{
-      const t = (absDeg-90)/90;
-      curve = 0.64 + 0.36*Math.pow(t,0.82);
-    }
-
-    // 첫 제어점은 거의 중앙 전방으로 유지해 "발밑에서 직진" 느낌.
-    const c1 = {
-      x: start.x + sign*W*(0.008 + 0.035*curve),
-      y: H*0.76
+    const halfFov = H_FOV/2;
+    const visibleRatio = clamp(diff/halfFov,-1.25,1.25);
+    const forwardEnd = {
+      x: W*0.50 + visibleRatio*(W*0.35),
+      y: H*0.50
     };
-
-    // 두 번째 제어점에서 실제 회전 강도를 크게 만든다.
-    // 90° 이상에서는 반대쪽까지 밀어 hook 형태를 만든다.
-    let c2Offset = W*(0.06 + 0.48*curve);
-    if(absDeg > 90){
-      c2Offset += W*0.12*((absDeg-90)/90);
-    }
-
-    const c2 = {
-      x: end.x - sign*c2Offset,
-      y: H*(0.59 - 0.07*curve)
-    };
-
-    function point(t){
-      const mt = 1-t;
-      return {
-        x: mt*mt*mt*start.x +
-           3*mt*mt*t*c1.x +
-           3*mt*t*t*c2.x +
-           t*t*t*end.x,
-        y: mt*mt*mt*start.y +
-           3*mt*mt*t*c1.y +
-           3*mt*t*t*c2.y +
-           t*t*t*end.y
-      };
-    }
 
     const pts = [];
-    const steps = 72;
-    for(let i=0;i<=steps;i++) pts.push(point(i/steps));
 
-    const lengths = [0];
-    let total = 0;
-    for(let i=1;i<pts.length;i++){
-      total += Math.hypot(
-        pts[i].x-pts[i-1].x,
-        pts[i].y-pts[i-1].y
+    function addCubic(p0,p1,p2,p3,steps,skipFirst=false){
+      for(let i=skipFirst ? 1 : 0;i<=steps;i++){
+        const t=i/steps, mt=1-t;
+        pts.push({
+          x: mt*mt*mt*p0.x + 3*mt*mt*t*p1.x + 3*mt*t*t*p2.x + t*t*t*p3.x,
+          y: mt*mt*mt*p0.y + 3*mt*mt*t*p1.y + 3*mt*t*t*p2.y + t*t*t*p3.y
+        });
+      }
+    }
+
+    function addArc(cx,cy,r,a0,a1,steps,skipFirst=true){
+      for(let i=skipFirst ? 1 : 0;i<=steps;i++){
+        const t=i/steps;
+        const a=a0+(a1-a0)*t;
+        pts.push({x:cx+Math.cos(a)*r,y:cy+Math.sin(a)*r});
+      }
+    }
+
+    if(absDeg <= 90){
+      let curve;
+      if(absDeg <= 8){
+        curve=0;
+      }else if(absDeg <= 25){
+        curve=0.04+0.14*Math.pow((absDeg-8)/17,1.35);
+      }else if(absDeg <= 45){
+        curve=0.18+0.20*Math.pow((absDeg-25)/20,1.25);
+      }else{
+        curve=0.38+0.42*Math.pow((absDeg-45)/45,1.05);
+      }
+
+      const c1={
+        x:start.x+sign*W*(0.008+0.035*curve),
+        y:H*0.76
+      };
+      const c2={
+        x:forwardEnd.x-sign*W*(0.05+0.62*curve),
+        y:H*(0.59-0.07*curve)
+      };
+
+      addCubic(start,c1,c2,forwardEnd,72);
+
+    } else {
+      const u = (absDeg-90)/90;
+
+      const approachEnd = {
+        x: start.x,
+        y: H*0.66
+      };
+
+      addCubic(
+        start,
+        {x:start.x,y:H*0.88},
+        {x:start.x,y:H*0.74},
+        approachEnd,
+        26
       );
+
+      const radius = W*(0.18 + 0.10*u);
+      const cx = approachEnd.x + sign*radius;
+      const cy = approachEnd.y;
+
+      const sweep = Math.PI/2 + (Math.PI/2)*u;
+
+      let a0, a1;
+      if(sign > 0){
+        a0 = Math.PI;
+        a1 = Math.PI - sweep;
+      }else{
+        a0 = 0;
+        a1 = sweep;
+      }
+
+      addArc(cx,cy,radius,a0,a1,34,true);
+
+      const last = pts[pts.length-1];
+      const returnAmount = u;
+      const returnEnd = {
+        x: last.x,
+        y: lerp(last.y, H*0.78, returnAmount)
+      };
+
+      if(returnAmount > 0.05){
+        const prev = pts[pts.length-2];
+        const tx = last.x-prev.x;
+        const ty = last.y-prev.y;
+        const len = Math.hypot(tx,ty)||1;
+        const ux=tx/len, uy=ty/len;
+
+        addCubic(
+          last,
+          {x:last.x+ux*H*0.035,y:last.y+uy*H*0.035},
+          {x:returnEnd.x,y:returnEnd.y-H*0.035},
+          returnEnd,
+          18,
+          true
+        );
+      }
+    }
+
+    // 누적 거리
+    const lengths=[0];
+    let total=0;
+    for(let i=1;i<pts.length;i++){
+      total+=Math.hypot(pts[i].x-pts[i-1].x,pts[i].y-pts[i-1].y);
       lengths.push(total);
     }
     total ||= 1;
 
-    const left = [];
-    const right = [];
-
+    // 레퍼런스 대비: 근거리 폭을 더 두툼하게, 원거리는 뾰족한 점(farWidth≈0)까지
+    // 좁아지도록 해서 "짧고 두꺼운 화살표" ~ "길게 휘어지는 뾰족한 리본" 두 느낌을
+    // 하나의 보간식으로 표현한다.
+    const left=[],right=[];
     for(let i=0;i<pts.length;i++){
-      const prev = pts[Math.max(0,i-1)];
-      const next = pts[Math.min(pts.length-1,i+1)];
-      const dx = next.x-prev.x;
-      const dy = next.y-prev.y;
-      const len = Math.hypot(dx,dy) || 1;
+      const prev=pts[Math.max(0,i-1)];
+      const next=pts[Math.min(pts.length-1,i+1)];
+      const dx=next.x-prev.x, dy=next.y-prev.y;
+      const len=Math.hypot(dx,dy)||1;
+      const nx=-dy/len, ny=dx/len;
 
-      const nx = -dy/len;
-      const ny = dx/len;
-
-      const t = lengths[i]/total;
-
-      // 원근을 강하게 적용:
-      // 가까운 쪽은 매우 넓고, 40~50% 지점 이후 급격히 좁아진다.
-      const perspective = 1-Math.pow(1-t,3.25);
-      const nearWidth = Math.min(W*0.46, 210);
-      const farWidth = 18;
-      const width = lerp(nearWidth, farWidth, perspective);
-      const half = width/2;
+      const t=lengths[i]/total;
+      const perspective=1-Math.pow(1-t,3.4);
+      const nearWidth=Math.min(W*0.38,168);
+      const farWidth=3;
+      const width=lerp(nearWidth,farWidth,perspective);
+      const half=width/2;
 
       left.push({x:pts[i].x+nx*half,y:pts[i].y+ny*half});
       right.push({x:pts[i].x-nx*half,y:pts[i].y-ny*half});
     }
 
-    function polygonPath(L,R){
-      let d = `M ${L[0].x} ${L[0].y}`;
-      for(let i=1;i<L.length;i++) d += ` L ${L[i].x} ${L[i].y}`;
-      for(let i=R.length-1;i>=0;i--) d += ` L ${R[i].x} ${R[i].y}`;
-      return d+' Z';
-    }
+    let ribbonD=`M ${left[0].x} ${left[0].y}`;
+    for(let i=1;i<left.length;i++) ribbonD+=` L ${left[i].x} ${left[i].y}`;
+    for(let i=right.length-1;i>=0;i--) ribbonD+=` L ${right[i].x} ${right[i].y}`;
+    ribbonD+=' Z';
 
-    const ribbonD = polygonPath(left,right);
+    // 밝은(안쪽) 가장자리를 따라가는 얇은 림 라이트 — 레퍼런스의 은은한
+    // 하이라이트 엣지를 흉내낸다.
+    let rimD=`M ${left[0].x} ${left[0].y}`;
+    for(let i=1;i<left.length;i++) rimD+=` L ${left[i].x} ${left[i].y}`;
 
-    let coreD = `M ${pts[0].x} ${pts[0].y}`;
-    for(let i=1;i<pts.length;i++){
-      coreD += ` L ${pts[i].x} ${pts[i].y}`;
-    }
-
-    // 화살촉을 리본의 마지막 진행 방향과 완전히 연결.
-    const pEnd = pts[pts.length-1];
-    const pPrev = pts[pts.length-6];
-    const vx = pEnd.x-pPrev.x;
-    const vy = pEnd.y-pPrev.y;
-    const vlen = Math.hypot(vx,vy)||1;
-    const ux = vx/vlen;
-    const uy = vy/vlen;
-    const nx = -uy;
-    const ny = ux;
-
-    const arrowLen = clamp(H*0.075, 48, 78);
-    const arrowHalf = 30;
-
-    const neck = {
-      x:pEnd.x-ux*arrowLen*0.48,
-      y:pEnd.y-uy*arrowLen*0.48
-    };
-
-    const tip = {
-      x:pEnd.x+ux*arrowLen*0.38,
-      y:pEnd.y+uy*arrowLen*0.38
-    };
-
-    const arrowD =
-      `M ${tip.x} ${tip.y}` +
-      ` L ${neck.x+nx*arrowHalf} ${neck.y+ny*arrowHalf}` +
-      ` L ${pEnd.x-ux*arrowLen*0.05} ${pEnd.y-uy*arrowLen*0.05}` +
-      ` L ${neck.x-nx*arrowHalf} ${neck.y-ny*arrowHalf} Z`;
-
-    // 마커를 화살촉 끝에 직접 배치하여 하나의 객체로 보이게 한다.
-    const marker = {
-      x: tip.x,
-      y: tip.y
-    };
-
-    return { ribbonD, coreD, arrowD, marker, end, curve };
+    return {ribbonD, rimD};
   }
 
   function renderRoute(){
-    if(filteredHeading != null && targetBearing != null){
-      desiredDiff = norm180(targetBearing-filteredHeading);
+    if(targetBearing != null && rawHeading != null){
+      const rawDiff = norm180(targetBearing-rawHeading);
+
+      if(!alignedLock && Math.abs(rawDiff) <= 4){
+        alignedLock = true;
+      }else if(alignedLock && Math.abs(rawDiff) >= 7){
+        alignedLock = false;
+      }
+
+      const crossedTarget =
+        previousRawDiff != null &&
+        Math.sign(previousRawDiff) !== Math.sign(rawDiff) &&
+        Math.abs(rawDiff) < 12 &&
+        Math.abs(previousRawDiff) < 12;
+
+      previousRawDiff = rawDiff;
+
+      if(alignedLock || crossedTarget){
+        desiredDiff = 0;
+        visualDiff *= 0.35;
+      }else if(filteredHeading != null){
+        desiredDiff = norm180(targetBearing-filteredHeading);
+      }
     }
 
-    // 센서 필터와 별도로 화면 그래픽에도 easing.
     const delta = norm180(desiredDiff-visualDiff);
     const visualAlpha =
-      Math.abs(delta) > 60 ? 0.095 :
-      Math.abs(delta) > 20 ? 0.065 :
-                             0.035;
+      Math.abs(delta) > 70 ? 0.30 :
+      Math.abs(delta) > 35 ? 0.23 :
+      Math.abs(delta) > 15 ? 0.17 :
+      Math.abs(delta) > 6  ? 0.12 :
+                             0.075;
 
-    visualDiff += delta*visualAlpha;
+    if(Math.abs(delta) < 0.45){
+      visualDiff = desiredDiff;
+    }else{
+      visualDiff += delta*visualAlpha;
+    }
+
+    if(alignedLock && Math.abs(visualDiff) < 1.2){
+      visualDiff = 0;
+    }
 
     const route = buildRoute(visualDiff);
     routeRibbon.setAttribute('d',route.ribbonD);
     routeShadow.setAttribute('d',route.ribbonD);
-    routeCore.setAttribute('d',route.coreD);
-    routeArrow.setAttribute('d',route.arrowD);
+    routeRim.setAttribute('d',route.rimD);
 
-    routeEndHalo.setAttribute('cx', route.marker.x);
-    routeEndHalo.setAttribute('cy', route.marker.y);
-    routeEndDot.setAttribute('cx', route.marker.x);
-    routeEndDot.setAttribute('cy', route.marker.y);
-
-    const W = window.innerWidth;
     const halfFov = H_FOV/2;
     const onScreen = Math.abs(visualDiff) <= halfFov;
 
     if(onScreen){
       edgeHint.style.display = 'none';
-      routeEndHalo.style.display = '';
-      routeEndDot.style.display = '';
     }else{
       edgeHint.style.display = 'flex';
-      routeEndHalo.style.display = '';
-      routeEndDot.style.display = '';
       if(visualDiff < 0){
         edgeHint.className = 'left';
-        edgeHint.textContent = `← 목표 ${formatDistance(targetDistance)}`;
+        edgeHint.textContent = `← ${formatDistance(targetDistance)}`;
       }else{
         edgeHint.className = 'right';
-        edgeHint.textContent = `목표 ${formatDistance(targetDistance)} →`;
+        edgeHint.textContent = `${formatDistance(targetDistance)} →`;
       }
     }
 
     if(filteredHeading != null){
       headingStatus.textContent = `방향 ${Math.round(filteredHeading)}°`;
+    }
+
+    if(currentSpeed != null){
+      speedValue.textContent = `${Math.round(currentSpeed*3.6)}`;
     }
 
     debug.textContent =
@@ -619,6 +647,9 @@
         longitude: pos.coords.longitude,
         accuracy: pos.coords.accuracy
       };
+      currentSpeed = (typeof pos.coords.speed === 'number' && pos.coords.speed >= 0)
+        ? pos.coords.speed
+        : null;
 
       gpsStatus.textContent = `GPS ±${Math.round(pos.coords.accuracy)}m`;
       updateTargetFromGps();
@@ -680,8 +711,7 @@
   // 권한 전에도 레이아웃 형태는 보이도록 초기 렌더.
   routeRibbon.setAttribute('d','');
   routeShadow.setAttribute('d','');
-  routeCore.setAttribute('d','');
-  routeArrow.setAttribute('d','');
+  routeRim.setAttribute('d','');
 })();
 </script>
 </body>
