@@ -77,10 +77,10 @@
   <div id="shade"></div>
 
   <svg id="guideLine" aria-hidden="true">
-    <polygon id="guideRibbon" points=""></polygon>
+    <path id="guideRibbon" d=""></path>
   </svg>
 
-  <div id="versionLabel">v1.2</div>
+  <div id="versionLabel">v1.3</div>
 
   <div id="status">
     <div class="pill" id="gpsStatus">GPS 대기</div>
@@ -167,35 +167,89 @@
     render();
   }
 
-  function setGuideRibbonEnd(x, y){
+  function setGuideRibbonEnd(x, y, angleDiff = 0){
     const startX = window.innerWidth / 2;
     const startY = window.innerHeight;
 
-    // AR 경로가 바닥에 깔린 것처럼 보이도록
-    // 시작부는 150px, 목표 지점은 30px 폭으로 점차 좁아지는 원근 리본.
     const startWidth = 150;
     const endWidth = 30;
 
-    const dx = x - startX;
-    const dy = y - startY;
-    const len = Math.hypot(dx, dy) || 1;
+    // 목표와의 방향 차이가 커질수록 곡률을 키운다.
+    // 시야각 30° 부근에서 가장 강하게 휘고, 중앙에서는 거의 직선이다.
+    const curveRatio = Math.max(-1, Math.min(1, angleDiff / 30));
+    const distanceY = Math.max(120, startY - y);
+    const curveStrength = Math.min(window.innerWidth * 0.42, distanceY * 0.55);
 
-    // 진행 방향에 수직인 단위 벡터
-    const nx = -dy / len;
-    const ny = dx / len;
+    // 시작부는 화면 하단 중앙에서 약간 위쪽으로 뻗고,
+    // 중간 제어점이 좌/우로 이동하면서 바닥에 깔린 경로처럼 휜다.
+    const c1x = startX + curveRatio * curveStrength * 0.18;
+    const c1y = startY - distanceY * 0.28;
 
-    const sHalf = startWidth / 2;
-    const eHalf = endWidth / 2;
+    const c2x = x - curveRatio * curveStrength * 0.58;
+    const c2y = y + distanceY * 0.34;
 
-    const p1 = [startX + nx * sHalf, startY + ny * sHalf];
-    const p2 = [startX - nx * sHalf, startY - ny * sHalf];
-    const p3 = [x - nx * eHalf, y - ny * eHalf];
-    const p4 = [x + nx * eHalf, y + ny * eHalf];
+    function bezierPoint(t){
+      const mt = 1 - t;
+      const px =
+        mt*mt*mt*startX +
+        3*mt*mt*t*c1x +
+        3*mt*t*t*c2x +
+        t*t*t*x;
+      const py =
+        mt*mt*mt*startY +
+        3*mt*mt*t*c1y +
+        3*mt*t*t*c2y +
+        t*t*t*y;
+      return {x:px, y:py};
+    }
 
-    guideRibbon.setAttribute(
-      'points',
-      `${p1[0]},${p1[1]} ${p2[0]},${p2[1]} ${p3[0]},${p3[1]} ${p4[0]},${p4[1]}`
-    );
+    function bezierTangent(t){
+      const mt = 1 - t;
+      const dx =
+        3*mt*mt*(c1x-startX) +
+        6*mt*t*(c2x-c1x) +
+        3*t*t*(x-c2x);
+      const dy =
+        3*mt*mt*(c1y-startY) +
+        6*mt*t*(c2y-c1y) +
+        3*t*t*(y-c2y);
+      const len = Math.hypot(dx,dy) || 1;
+      return {x:dx/len, y:dy/len};
+    }
+
+    const left = [];
+    const right = [];
+    const steps = 24;
+
+    for(let i=0;i<=steps;i++){
+      const t = i / steps;
+      const p = bezierPoint(t);
+      const tangent = bezierTangent(t);
+
+      // 진행 방향에 수직인 벡터
+      const nx = -tangent.y;
+      const ny = tangent.x;
+
+      // 150px -> 30px로 원근 축소.
+      // 멀어질수록 조금 더 빠르게 좁혀져 바닥에 눕혀진 효과를 강화한다.
+      const perspectiveT = Math.pow(t, 0.72);
+      const width = startWidth + (endWidth - startWidth) * perspectiveT;
+      const half = width / 2;
+
+      left.push([p.x + nx*half, p.y + ny*half]);
+      right.push([p.x - nx*half, p.y - ny*half]);
+    }
+
+    let d = `M ${left[0][0]} ${left[0][1]}`;
+    for(let i=1;i<left.length;i++){
+      d += ` L ${left[i][0]} ${left[i][1]}`;
+    }
+    for(let i=right.length-1;i>=0;i--){
+      d += ` L ${right[i][0]} ${right[i][1]}`;
+    }
+    d += ' Z';
+
+    guideRibbon.setAttribute('d', d);
   }
 
   function render(){
@@ -207,7 +261,7 @@
     }
 
     if(currentHeading == null || targetBearing == null){
-      setGuideRibbonEnd(window.innerWidth / 2, window.innerHeight / 2);
+      setGuideRibbonEnd(window.innerWidth / 2, window.innerHeight / 2, 0);
       return;
     }
 
@@ -228,7 +282,7 @@
       const arrowY = window.innerHeight / 2;
       arrowWrap.style.left = `${x}px`;
       arrowWrap.style.opacity = '1';
-      setGuideRibbonEnd(x, arrowY);
+      setGuideRibbonEnd(x, arrowY, diff);
     } else {
       arrowWrap.style.display = 'none';
       edge.style.display = 'flex';
@@ -237,11 +291,11 @@
       if(diff < 0){
         edge.className = 'left';
         edge.textContent = `← 목표 ${targetDistance ? Math.round(targetDistance).toLocaleString() + ' m' : ''}`;
-        setGuideRibbonEnd(18, edgeY);
+        setGuideRibbonEnd(18, edgeY, -30);
       } else {
         edge.className = 'right';
         edge.textContent = `목표 ${targetDistance ? Math.round(targetDistance).toLocaleString() + ' m' : ''} →`;
-        setGuideRibbonEnd(window.innerWidth - 18, edgeY);
+        setGuideRibbonEnd(window.innerWidth - 18, edgeY, 30);
       }
     }
 
