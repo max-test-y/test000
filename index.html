@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-<title>AR Navigation v5.0</title>
+<title>AR Navigation v5.2</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
@@ -76,12 +76,60 @@
 
   .flowArrow {
     fill: none;
-    stroke: rgba(255,255,255,.92);
-    stroke-width: 5;
+    stroke: rgba(255,255,255,.88);
+    stroke-width: 2.1;
     stroke-linecap: round;
     stroke-linejoin: round;
-    filter: drop-shadow(0 1px 2px rgba(0,0,0,.28));
+    vector-effect: non-scaling-stroke;
+    filter: drop-shadow(0 1px 1px rgba(0,0,0,.24));
     pointer-events: none;
+  }
+
+  #targetMarker {
+    pointer-events: none;
+  }
+
+  .targetRingOuter,
+  .targetRingInner {
+    fill: rgba(47,141,255,.10);
+    stroke: rgba(195,231,255,.92);
+    vector-effect: non-scaling-stroke;
+    transform-box: fill-box;
+    transform-origin: center;
+  }
+
+  .targetRingOuter {
+    stroke-width: 2;
+    animation: targetPulseOuter 1.45s ease-out infinite;
+  }
+
+  .targetRingInner {
+    stroke-width: 2;
+    animation: targetPulseInner 1.45s ease-in-out infinite;
+  }
+
+  .targetDot {
+    fill: rgba(255,255,255,.96);
+    stroke: rgba(47,141,255,.95);
+    stroke-width: 2;
+    vector-effect: non-scaling-stroke;
+    filter: drop-shadow(0 0 5px rgba(47,141,255,.7));
+  }
+
+  @keyframes targetPulseOuter {
+    0%   { opacity:.82; transform:scale(.78); }
+    68%  { opacity:.20; transform:scale(1.28); }
+    100% { opacity:0; transform:scale(1.38); }
+  }
+
+  @keyframes targetPulseInner {
+    0%,100% { opacity:.96; transform:scale(.92); }
+    50%     { opacity:.58; transform:scale(1.06); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .targetRingOuter,
+    .targetRingInner { animation:none; }
   }
 
   #topStatus {
@@ -229,12 +277,17 @@
     <path id="routeRibbon"></path>
     <path id="routeFlowPath"></path>
     <g id="routeFlowArrows"></g>
+    <g id="targetMarker" opacity="0">
+      <ellipse class="targetRingOuter" cx="0" cy="0" rx="34" ry="13"></ellipse>
+      <ellipse class="targetRingInner" cx="0" cy="0" rx="23" ry="9"></ellipse>
+      <circle class="targetDot" cx="0" cy="0" r="4.5"></circle>
+    </g>
     <path id="routeRim"></path>
   </svg>
 
   <div id="topStatus">
     <div class="pill" id="gpsStatus">GPS 대기</div>
-    <div class="pill" id="versionLabel">v5.0</div>
+    <div class="pill" id="versionLabel">v5.2</div>
     <div class="pill" id="headingStatus">방향 대기</div>
   </div>
 
@@ -264,28 +317,28 @@
 (() => {
   const TARGETS = [
     {
-      lat: 37.5655250,
-      lon: 126.9789696,
+      lat: 37.6580327,
+      lon: 127.0312606,
       name: '목표 1',
-      guide: '시청삼거리까지 57m 이동(을지로)'
+      guide: '12m 이동'
     },
     {
-      lat: 37.5658711,
-      lon: 126.9793000,
+      lat: 37.6580039,
+      lon: 127.0312334,
       name: '목표 2',
-      guide: '시청삼거리에서 블랙라벨까지 31m 이동'
+      guide: '청담국어까지 횡단보도 이용'
     },
     {
-      lat: 37.5658747,
-      lon: 126.9796576,
+      lat: 37.6578381,
+      lon: 127.0312334,
       name: '목표 3',
-      guide: '블랙라벨 앞에서 오른쪽길로 68m 이동'
+      guide: '청담국어 앞에서 167m 이동(해등로)'
     },
     {
-      lat: 37.5653738,
-      lon: 126.9796623,
+      lat: 37.6565551,
+      lon: 127.0313326,
       name: '목표 4',
-      guide: '[서울 중구 을지로1가 192-33] 도착'
+      guide: '[서울 도봉구 쌍문동 59] 도착'
     }
   ];
 
@@ -315,6 +368,7 @@
   const routeShadow = document.getElementById('routeShadow');
   const routeFlowPath = document.getElementById('routeFlowPath');
   const routeFlowArrows = document.getElementById('routeFlowArrows');
+  const targetMarker = document.getElementById('targetMarker');
   const routeRim = document.getElementById('routeRim');
 
   const distValue = document.getElementById('distValue');
@@ -804,7 +858,7 @@
       }
     }
 
-    if(leftScreen.length<2) return {ribbonD:'',rimD:'',flowD:'',flowSamples:[],visibleCount:0};
+    if(leftScreen.length<2) return {ribbonD:'',rimD:'',flowD:'',flowSamples:[],targetPoint:null,targetWidth:0,visibleCount:0};
 
     let flowD=`M ${centerScreen[0].x} ${centerScreen[0].y}`;
     for(let i=1;i<centerScreen.length;i++) flowD+=` L ${centerScreen[i].x} ${centerScreen[i].y}`;
@@ -823,7 +877,22 @@
       width:widthScreen[i] || 1
     }));
 
-    return {ribbonD,rimD,flowD,flowSamples,visibleCount:leftScreen.length};
+    // 리본의 가장 먼 가시 지점을 목표 효과의 중심으로 사용.
+    const endIndex = Math.max(0, centerScreen.length - 1);
+    const targetPoint = centerScreen[endIndex]
+      ? {x:centerScreen[endIndex].x, y:centerScreen[endIndex].y}
+      : null;
+    const targetWidth = widthScreen[endIndex] || 0;
+
+    return {
+      ribbonD,
+      rimD,
+      flowD,
+      flowSamples,
+      targetPoint,
+      targetWidth,
+      visibleCount:leftScreen.length
+    };
   }
 
   function ensureFlowArrows(count){
@@ -831,7 +900,7 @@
       const p = document.createElementNS('http://www.w3.org/2000/svg','path');
       // 기본 형태: 진행 방향을 향하는 열린 chevron(">")
       // 로컬 기준 진행 방향은 위쪽(-Y).
-      p.setAttribute('d','M -12 8 L 0 -8 L 12 8');
+      p.setAttribute('d','M -11 5.5 L 0 -5.5 L 11 5.5');
       p.setAttribute('class','flowArrow');
       routeFlowArrows.appendChild(p);
     }
@@ -895,53 +964,62 @@
   function buildChevrons(dt){
     const metrics = buildChevronMetrics(currentFlowSamples);
 
-    if(!metrics || metrics.total < 30){
+    if(!metrics || metrics.total <= 0){
       ensureFlowArrows(0);
       return;
     }
 
-    // 누적 거리를 따라 phase가 계속 증가하면서 목표 방향으로 흐른다.
     chevronPhase =
       (chevronPhase + CHEVRON_SPEED * dt) % CHEVRON_SPACING;
 
     const positions = [];
 
-    // 시작점에서 phase만큼 앞선 지점부터 일정 간격으로 배치.
-    // centerline은 사용자 쪽 -> 목표 쪽 순서이므로 phase 증가 = 목표 방향 이동.
-    for(
-      let d = chevronPhase + 16;
-      d < metrics.total - 12;
-      d += CHEVRON_SPACING
-    ){
-      positions.push(d);
+    // 일반 상태: 화면 누적 거리 기준으로 일정 간격 배치.
+    if(metrics.total >= 42){
+      for(
+        let d = chevronPhase + 10;
+        d < metrics.total - 6;
+        d += CHEVRON_SPACING
+      ){
+        positions.push(d);
+      }
     }
 
-    ensureFlowArrows(Math.min(12, positions.length));
+    // 정면 경로에서는 원근 때문에 화면상 centerline 길이가 짧아질 수 있다.
+    // 이 경우에도 최소 4개의 chevron을 경로 진행률 기준으로 강제 배치한다.
+    if(positions.length < 4){
+      positions.length = 0;
+      const count = 5;
+      const phaseNorm = chevronPhase / CHEVRON_SPACING;
+
+      for(let i=0;i<count;i++){
+        let u = 0.10 + i*0.17 + phaseNorm*0.17;
+        u = ((u - 0.08) % 0.82 + 0.82) % 0.82 + 0.08;
+        positions.push(metrics.total * u);
+      }
+
+      positions.sort((a,b)=>a-b);
+    }
+
+    ensureFlowArrows(Math.min(10, positions.length));
 
     for(let i=0;i<routeFlowArrows.children.length;i++){
       const d = positions[i];
       const p = sampleChevronAtDistance(metrics, d);
       if(!p) continue;
 
-      // t는 "카메라에 얼마나 가까운가": 가까움=1, 멂=0.
       const t = clamp(1 - p.progress, 0, 1);
-
-      // 요청한 리본 원근식.
       const perspective = 1 - Math.pow(1 - t, 3.1);
 
-      // 실제 투영된 리본 폭에 비례시키고,
-      // 같은 원근식을 추가 적용해 멀리 있는 chevron을 더 자연스럽게 축소.
+      // 유도선 폭의 약 70%를 쓰되 지나치게 두껍게 보이지 않게 제한.
       const desiredWidth = clamp(
-        p.width * CHEVRON_WIDTH_RATIO * (0.55 + 0.45 * perspective),
-        12,
-        86
+        p.width * 0.70 * (0.62 + 0.38 * perspective),
+        15,
+        74
       );
 
-      // 기본 chevron 폭 약 24px
-      const scale = desiredWidth / 24;
-
-      // 가까울수록 진하고, 멀수록 흐리게.
-      const opacity = 0.28 + 0.68 * perspective;
+      const scale = desiredWidth / 22;
+      const opacity = 0.26 + 0.68 * perspective;
 
       const arrow = routeFlowArrows.children[i];
       arrow.setAttribute(
@@ -949,11 +1027,25 @@
         `translate(${p.x} ${p.y}) rotate(${p.angle}) scale(${scale})`
       );
       arrow.setAttribute('opacity', opacity.toFixed(3));
-
-      // stroke도 함께 줄여 원근감이 더 자연스럽게 보이게 함.
-      const strokeWidth = clamp(3.2 + 2.4 * perspective, 3.2, 5.6);
-      arrow.setAttribute('stroke-width', strokeWidth.toFixed(2));
     }
+  }
+
+  function updateTargetMarker(route){
+    if(!route.targetPoint || !Number.isFinite(route.targetPoint.x) || !Number.isFinite(route.targetPoint.y)){
+      targetMarker.setAttribute('opacity','0');
+      return;
+    }
+
+    const p = route.targetPoint;
+
+    // 목표 마커도 리본 끝 폭에 맞춰 원근 크기를 정한다.
+    const markerScale = clamp((route.targetWidth || 22) / 40, 0.42, 1.35);
+
+    targetMarker.setAttribute(
+      'transform',
+      `translate(${p.x} ${p.y}) scale(${markerScale})`
+    );
+    targetMarker.setAttribute('opacity','1');
   }
 
   function renderRoute(now){
@@ -1010,6 +1102,7 @@
     const dt = lastFrameTime == null ? 0 : Math.min(0.05, (now - lastFrameTime) / 1000);
     lastFrameTime = now;
     buildChevrons(dt);
+    updateTargetMarker(route);
 
     const halfFov = H_FOV/2;
     const onScreen = Math.abs(visualDiff) <= halfFov;
@@ -1157,6 +1250,7 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
   routeShadow.setAttribute('d','');
   routeFlowPath.setAttribute('d','');
   routeRim.setAttribute('d','');
+  targetMarker.setAttribute('opacity','0');
   ensureFlowArrows(0);
   updateTargetUi();
 })();
