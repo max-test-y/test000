@@ -94,7 +94,7 @@
     <path id="guideHighlight" d=""></path>
   </svg>
 
-  <div id="versionLabel">v1.6</div>
+  <div id="versionLabel">v1.7</div>
 
   <div id="status">
     <div class="pill" id="gpsStatus">GPS 대기</div>
@@ -203,89 +203,94 @@
     const W = window.innerWidth;
     const H = window.innerHeight;
 
-    // 유도선 자체의 화면 좌표를 한 번 더 안정화.
-    // 마커가 조금 흔들려도 경로는 더 느리고 부드럽게 따라간다.
+    // 유도선 좌표 안정화
     if(smoothRouteX == null) smoothRouteX = x;
 
     const xDelta = x - smoothRouteX;
-    if(Math.abs(xDelta) > 1.5){
-      const xAlpha = Math.abs(xDelta) > 70 ? 0.18 : Math.abs(xDelta) > 25 ? 0.11 : 0.065;
+    if(Math.abs(xDelta) > 1.8){
+      const xAlpha =
+        Math.abs(xDelta) > 80 ? 0.16 :
+        Math.abs(xDelta) > 30 ? 0.10 :
+                               0.055;
       smoothRouteX += xDelta * xAlpha;
     }
 
     const diffDelta = angleDiff - smoothRouteDiff;
-    if(Math.abs(diffDelta) > 0.8){
-      const dAlpha = Math.abs(diffDelta) > 15 ? 0.16 : 0.07;
+    if(Math.abs(diffDelta) > 0.9){
+      const dAlpha = Math.abs(diffDelta) > 15 ? 0.14 : 0.06;
       smoothRouteDiff += diffDelta * dAlpha;
     }
 
     const targetX = smoothRouteX;
     const targetY = y + 42;
 
-    // 화면 하단 바깥에서 시작해 바닥에 깔린 느낌 유지.
+    // 화면 아래에서 시작해 바닥에 깔린 느낌 유지
     const startX = W / 2;
     const startY = H + 110;
 
     const startWidth = Math.min(220, W * 0.48);
     const endWidth = 18;
 
-    // "목표 마커와 같은 X축에서 꺾이는" 방식:
-    // 먼저 목표 X까지 바닥을 따라 부드럽게 접근하고,
-    // 그 X축에 도달한 뒤 수직에 가까운 마지막 구간으로 연결.
-    const bendY = targetY + Math.max(90, (startY - targetY) * 0.33);
+    const dxToTarget = targetX - startX;
+    const absDx = Math.abs(dxToTarget);
 
-    // 꺾임이 딱딱하지 않도록 코너 반경 개념의 중간 구간을 둔다.
-    const bendSoft = Math.min(70, Math.max(34, Math.abs(targetX - startX) * 0.22));
-
-    const dir = targetX >= startX ? 1 : -1;
-
-    // 3개의 중심선 구간:
-    // A. 시작 -> 목표 X 근처
-    // B. 둥근 코너
-    // C. 목표 X축을 따라 위로
-    const p0 = {x:startX, y:startY};
-    const p1 = {x:targetX - dir * bendSoft, y:bendY + 24};
-    const p2 = {x:targetX, y:bendY};
-    const p3 = {x:targetX, y:targetY};
-
-    function cubicPoint(a,b,c,d,t){
-      const mt = 1-t;
-      return {
-        x: mt*mt*mt*a.x + 3*mt*mt*t*b.x + 3*mt*t*t*c.x + t*t*t*d.x,
-        y: mt*mt*mt*a.y + 3*mt*mt*t*b.y + 3*mt*t*t*c.y + t*t*t*d.y
-      };
-    }
-
-    // 첫 구간은 완만하게 목표 X 쪽으로 접근.
-    const a1 = p0;
-    const b1 = {x:startX + (p1.x-startX)*0.18, y:startY - (startY-p1.y)*0.42};
-    const c1 = {x:p1.x - (p1.x-startX)*0.18, y:p1.y + 34};
-    const d1 = p1;
-
-    // 두 번째 구간에서만 자연스럽게 "꺾임".
-    const a2 = p1;
-    const b2 = {x:p1.x + dir*bendSoft*0.56, y:p1.y - 10};
-    const c2 = {x:p2.x - dir*bendSoft*0.10, y:p2.y + 22};
-    const d2 = p2;
-
-    // 마지막은 목표 마커와 동일 X축을 따라 올라간다.
-    const a3 = p2;
-    const b3 = {x:targetX, y:p2.y - (p2.y-p3.y)*0.35};
-    const c3 = {x:targetX, y:p3.y + (p2.y-p3.y)*0.25};
-    const d3 = p3;
+    // 거의 정면일 때는 꺾임 없이 직선으로 수렴
+    const straightThreshold = Math.max(14, W * 0.035);
+    const isStraight = absDx <= straightThreshold;
 
     const center = [];
-    const seg1 = 24, seg2 = 12, seg3 = 16;
 
-    for(let i=0;i<=seg1;i++) center.push(cubicPoint(a1,b1,c1,d1,i/seg1));
-    for(let i=1;i<=seg2;i++) center.push(cubicPoint(a2,b2,c2,d2,i/seg2));
-    for(let i=1;i<=seg3;i++) center.push(cubicPoint(a3,b3,c3,d3,i/seg3));
+    if(isStraight){
+      // 정면: 하나의 직선 경로
+      const steps = 46;
+      for(let i=0;i<=steps;i++){
+        const t = i / steps;
+        center.push({
+          x: startX + (targetX - startX) * t,
+          y: startY + (targetY - startY) * t
+        });
+      }
+    } else {
+      // 핵심:
+      // 꺾임은 목표 마커와 "동일한 X축"에서만 발생한다.
+      // 1) 하단 중앙 -> 목표 X축의 bend 지점까지 직선
+      // 2) 그 자리에서 90도 꺾여 목표까지 수직 진행
+      //
+      // bendY는 목표보다 아래에 위치하며, 목표 X축과 정확히 일치.
+      const verticalGap = Math.max(105, Math.min(180, (startY - targetY) * 0.30));
+      const bendX = targetX;
+      const bendY = targetY + verticalGap;
 
-    // 누적 거리로 폭 taper를 계산해 원근감을 더 자연스럽게 유지.
+      const seg1 = 34;
+      const seg2 = 18;
+
+      // 첫 번째 직선 구간
+      for(let i=0;i<=seg1;i++){
+        const t = i / seg1;
+        center.push({
+          x: startX + (bendX - startX) * t,
+          y: startY + (bendY - startY) * t
+        });
+      }
+
+      // 같은 X축에서 90° 꺾인 뒤 수직으로 목표까지
+      for(let i=1;i<=seg2;i++){
+        const t = i / seg2;
+        center.push({
+          x: bendX,
+          y: bendY + (targetY - bendY) * t
+        });
+      }
+    }
+
+    // 누적 거리 기반 원근 폭 계산
     const lengths = [0];
     let total = 0;
     for(let i=1;i<center.length;i++){
-      total += Math.hypot(center[i].x-center[i-1].x, center[i].y-center[i-1].y);
+      total += Math.hypot(
+        center[i].x - center[i-1].x,
+        center[i].y - center[i-1].y
+      );
       lengths.push(total);
     }
     total = total || 1;
@@ -295,45 +300,67 @@
 
     for(let i=0;i<center.length;i++){
       const p = center[i];
-      const prev = center[Math.max(0,i-1)];
-      const next = center[Math.min(center.length-1,i+1)];
+      const prev = center[Math.max(0, i-1)];
+      const next = center[Math.min(center.length-1, i+1)];
 
-      const dx = next.x - prev.x;
-      const dy = next.y - prev.y;
-      const len = Math.hypot(dx,dy) || 1;
-      const nx = -dy/len;
-      const ny = dx/len;
+      const tx = next.x - prev.x;
+      const ty = next.y - prev.y;
+      const len = Math.hypot(tx, ty) || 1;
 
-      const t = lengths[i]/total;
-      const perspective = 1 - Math.pow(1-t, 2.35);
-      const width = startWidth + (endWidth-startWidth)*perspective;
-      const half = width/2;
+      const nx = -ty / len;
+      const ny = tx / len;
 
-      left.push([p.x + nx*half, p.y + ny*half]);
-      right.push([p.x - nx*half, p.y - ny*half]);
+      const t = lengths[i] / total;
+
+      // 가까운 쪽에서 크게 좁아지며 바닥 원근감 형성
+      const perspective = 1 - Math.pow(1 - t, 2.35);
+      const width = startWidth + (endWidth - startWidth) * perspective;
+      const half = width / 2;
+
+      left.push([p.x + nx * half, p.y + ny * half]);
+      right.push([p.x - nx * half, p.y - ny * half]);
     }
 
     let d = `M ${left[0][0]} ${left[0][1]}`;
-    for(let i=1;i<left.length;i++) d += ` L ${left[i][0]} ${left[i][1]}`;
-    for(let i=right.length-1;i>=0;i--) d += ` L ${right[i][0]} ${right[i][1]}`;
+    for(let i=1;i<left.length;i++){
+      d += ` L ${left[i][0]} ${left[i][1]}`;
+    }
+    for(let i=right.length-1;i>=0;i--){
+      d += ` L ${right[i][0]} ${right[i][1]}`;
+    }
     d += ' Z';
     guideRibbon.setAttribute('d', d);
 
+    // 중앙 HUD 라인도 동일한 L자 경로 사용
     let centerD = `M ${center[0].x} ${center[0].y}`;
-    for(let i=1;i<center.length;i++) centerD += ` L ${center[i].x} ${center[i].y}`;
+    for(let i=1;i<center.length;i++){
+      centerD += ` L ${center[i].x} ${center[i].y}`;
+    }
     guideHighlight.setAttribute('d', centerD);
 
-    // 색상은 안정화된 각도 차이를 사용해 떨림 방지.
-    const severity = Math.min(1, Math.abs(smoothRouteDiff)/32);
-    const hue = 215 + (30-215)*Math.pow(severity,0.82);
+    // 방향 차이에 따른 색상
+    const severity = Math.min(1, Math.abs(smoothRouteDiff) / 32);
+    const hue = 215 + (30 - 215) * Math.pow(severity, 0.82);
     const sat = 96;
-    const lightNear = 48 + 4*severity;
-    const lightFar = 55 + 2*severity;
+    const lightNear = 48 + 4 * severity;
+    const lightFar = 55 + 2 * severity;
 
-    routeStopNear.setAttribute('stop-color', `hsl(${hue} ${sat}% ${lightNear}%)`);
-    routeStopFar.setAttribute('stop-color', `hsl(${hue} ${sat}% ${lightFar}%)`);
-    routeStopNear.setAttribute('stop-opacity', String(0.68 - 0.10*severity));
-    routeStopFar.setAttribute('stop-opacity', String(0.48 - 0.08*severity));
+    routeStopNear.setAttribute(
+      'stop-color',
+      `hsl(${hue} ${sat}% ${lightNear}%)`
+    );
+    routeStopFar.setAttribute(
+      'stop-color',
+      `hsl(${hue} ${sat}% ${lightFar}%)`
+    );
+    routeStopNear.setAttribute(
+      'stop-opacity',
+      String(0.68 - 0.10 * severity)
+    );
+    routeStopFar.setAttribute(
+      'stop-opacity',
+      String(0.48 - 0.08 * severity)
+    );
   }
 
   function render(){
