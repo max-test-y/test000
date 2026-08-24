@@ -3,78 +3,197 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-<title>AR Direction Pointer</title>
+<title>AR Navigation v2.0</title>
 <style>
-  :root{color-scheme:dark}
-  *{box-sizing:border-box}
-  html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#000;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif}
-  #app{position:relative;width:100%;height:100%;background:#000}
-  video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000}
-  #shade{position:absolute;inset:0;pointer-events:none;background:linear-gradient(to bottom,rgba(0,0,0,.34),transparent 20%,transparent 72%,rgba(0,0,0,.35))}
-  #status{
-    position:absolute;top:max(14px,env(safe-area-inset-top));left:14px;right:14px;
-    display:flex;justify-content:space-between;gap:8px;z-index:5;pointer-events:none
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #000;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
   }
-  #versionLabel{
-    position:absolute;top:max(14px,env(safe-area-inset-top));left:50%;
-    transform:translateX(-50%);z-index:7;pointer-events:none;
-    padding:8px 10px;border-radius:999px;
-    background:rgba(0,0,0,.48);backdrop-filter:blur(10px);
-    color:#fff;font-size:12px;line-height:1;
-    border:1px solid rgba(255,255,255,.14)
+  #app {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #000;
   }
-  .pill{background:rgba(0,0,0,.48);backdrop-filter:blur(10px);padding:8px 10px;border-radius:999px;font-size:12px;line-height:1;color:#fff;border:1px solid rgba(255,255,255,.14)}
+  #camera {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    background: #000;
+  }
+  #shade {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    background:
+      linear-gradient(to bottom,
+        rgba(0,0,0,.34) 0%,
+        rgba(0,0,0,.05) 18%,
+        rgba(0,0,0,0) 48%,
+        rgba(0,0,0,.08) 72%,
+        rgba(0,0,0,.34) 100%);
+  }
 
-  #guideLine{
-    position:absolute;inset:0;width:100%;height:100%;z-index:3;
-    pointer-events:none;overflow:visible
+  #routeSvg {
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    overflow: visible;
   }
-  #guideRibbon{
-    fill:url(#routeGradient);
-    filter:drop-shadow(0 2px 2px rgba(0,0,0,.20));
+  #routeShadow {
+    fill: rgba(0,0,0,.14);
+    filter: blur(3px);
   }
-  #guideHighlight{
-    fill:none;
-    stroke:rgba(255,255,255,.20);
-    stroke-width:2;
-    stroke-linecap:round;
-    pointer-events:none;
+  #routeRibbon {
+    fill: url(#routeFill);
+    filter: drop-shadow(0 3px 3px rgba(0,0,0,.17));
+  }
+  #routeCore {
+    fill: none;
+    stroke: rgba(255,255,255,.14);
+    stroke-width: 2;
+    stroke-linecap: round;
+  }
+  #routeArrow {
+    fill: url(#arrowFill);
+    filter: drop-shadow(0 2px 3px rgba(0,0,0,.18));
   }
 
-  #arrowWrap{
-    position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
-    z-index:4;display:flex;flex-direction:column;align-items:center;gap:6px;
-    transition:left .12s linear,top .12s linear,opacity .12s linear
+  #topStatus {
+    position: absolute;
+    top: max(14px, env(safe-area-inset-top));
+    left: 14px;
+    right: 14px;
+    z-index: 8;
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 8px;
+    pointer-events: none;
   }
-  #arrow{
-    width:0;height:0;border-left:22px solid transparent;border-right:22px solid transparent;
-    border-bottom:46px solid white;filter:drop-shadow(0 3px 8px rgba(0,0,0,.65))
+  .pill {
+    width: max-content;
+    max-width: 100%;
+    padding: 8px 10px;
+    border-radius: 999px;
+    background: rgba(0,0,0,.48);
+    border: 1px solid rgba(255,255,255,.14);
+    backdrop-filter: blur(10px);
+    color: #fff;
+    font-size: 12px;
+    line-height: 1;
+    white-space: nowrap;
   }
-  #label{
-    padding:7px 10px;border-radius:999px;background:rgba(0,0,0,.54);
-    color:white;font-weight:700;font-size:14px;white-space:nowrap;border:1px solid rgba(255,255,255,.16)
+  #versionLabel { justify-self: center; }
+  #headingStatus { justify-self: end; }
+
+  #targetMarker {
+    position: absolute;
+    z-index: 7;
+    left: 50%;
+    top: 40%;
+    transform: translate(-50%,-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    pointer-events: none;
+    transition: opacity .18s ease;
   }
-  #edge{
-    position:absolute;top:50%;z-index:4;display:none;align-items:center;gap:8px;
-    background:rgba(0,0,0,.56);color:#fff;border:1px solid rgba(255,255,255,.16);
-    border-radius:999px;padding:10px 13px;font-weight:700;transform:translateY(-50%);
-    backdrop-filter:blur(10px);pointer-events:none
+  #targetDot {
+    width: 12px;
+    height: 12px;
+    border: 3px solid white;
+    border-radius: 50%;
+    background: rgba(15,95,255,.82);
+    box-shadow: 0 2px 8px rgba(0,0,0,.55);
   }
-  #edge.left{left:12px}
-  #edge.right{right:12px}
-  #controls{
-    position:absolute;left:14px;right:14px;bottom:max(18px,env(safe-area-inset-bottom));
-    z-index:6;display:flex;gap:10px
+  #targetLabel {
+    padding: 6px 9px;
+    border-radius: 999px;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+    white-space: nowrap;
+    background: rgba(0,0,0,.47);
+    border: 1px solid rgba(255,255,255,.14);
+    backdrop-filter: blur(8px);
   }
-  button{
-    flex:1;appearance:none;border:0;border-radius:16px;padding:14px 12px;
-    font-size:15px;font-weight:700;background:#fff;color:#111
+
+  #edgeHint {
+    position: absolute;
+    z-index: 7;
+    top: 43%;
+    display: none;
+    align-items: center;
+    gap: 7px;
+    padding: 9px 11px;
+    border-radius: 999px;
+    background: rgba(0,0,0,.52);
+    border: 1px solid rgba(255,255,255,.15);
+    color: white;
+    font-size: 13px;
+    font-weight: 700;
+    backdrop-filter: blur(8px);
+    pointer-events: none;
   }
-  button.secondary{background:rgba(20,20,20,.76);color:#fff;border:1px solid rgba(255,255,255,.18)}
-  #debug{
-    position:absolute;left:14px;bottom:86px;z-index:5;
-    color:#fff;font-size:11px;line-height:1.5;background:rgba(0,0,0,.45);
-    padding:8px 10px;border-radius:12px;display:none;white-space:pre-wrap
+  #edgeHint.left { left: 12px; }
+  #edgeHint.right { right: 12px; }
+
+  #debug {
+    position: absolute;
+    left: 14px;
+    bottom: 88px;
+    z-index: 9;
+    display: none;
+    padding: 9px 11px;
+    border-radius: 12px;
+    background: rgba(0,0,0,.52);
+    color: white;
+    font-size: 11px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    pointer-events: none;
+  }
+
+  #controls {
+    position: absolute;
+    z-index: 10;
+    left: 14px;
+    right: 14px;
+    bottom: max(18px, env(safe-area-inset-bottom));
+    display: flex;
+    gap: 10px;
+  }
+  button {
+    min-height: 48px;
+    flex: 1;
+    border: 0;
+    border-radius: 16px;
+    padding: 12px;
+    font-size: 15px;
+    font-weight: 700;
+    background: white;
+    color: #111;
+  }
+  button.secondary {
+    flex: 0 0 82px;
+    background: rgba(20,20,20,.78);
+    color: white;
+    border: 1px solid rgba(255,255,255,.17);
   }
 </style>
 </head>
@@ -83,30 +202,36 @@
   <video id="camera" autoplay playsinline muted></video>
   <div id="shade"></div>
 
-  <svg id="guideLine" aria-hidden="true">
+  <svg id="routeSvg" aria-hidden="true">
     <defs>
-      <linearGradient id="routeGradient" x1="0" y1="1" x2="0" y2="0">
-        <stop id="routeStopNear" offset="0%" stop-color="#075BFF" stop-opacity=".62"></stop>
-        <stop id="routeStopFar" offset="100%" stop-color="#075BFF" stop-opacity=".42"></stop>
+      <linearGradient id="routeFill" x1="0" y1="1" x2="0" y2="0">
+        <stop offset="0%" stop-color="#126DFF" stop-opacity=".72"></stop>
+        <stop offset="58%" stop-color="#43A4FF" stop-opacity=".64"></stop>
+        <stop offset="100%" stop-color="#8AD2FF" stop-opacity=".72"></stop>
+      </linearGradient>
+      <linearGradient id="arrowFill" x1="0" y1="1" x2="0" y2="0">
+        <stop offset="0%" stop-color="#3F9CFF" stop-opacity=".74"></stop>
+        <stop offset="100%" stop-color="#A3DEFF" stop-opacity=".88"></stop>
       </linearGradient>
     </defs>
-    <path id="guideRibbon" d=""></path>
-    <path id="guideHighlight" d=""></path>
+    <path id="routeShadow"></path>
+    <path id="routeRibbon"></path>
+    <path id="routeCore"></path>
+    <path id="routeArrow"></path>
   </svg>
 
-  <div id="versionLabel">v1.8</div>
-
-  <div id="status">
+  <div id="topStatus">
     <div class="pill" id="gpsStatus">GPS 대기</div>
+    <div class="pill" id="versionLabel">v2.0</div>
     <div class="pill" id="headingStatus">방향 대기</div>
   </div>
 
-  <div id="arrowWrap" aria-label="목표 방향">
-    <div id="arrow"></div>
-    <div id="label">목표 위치</div>
+  <div id="targetMarker">
+    <div id="targetDot"></div>
+    <div id="targetLabel">목표</div>
   </div>
 
-  <div id="edge"></div>
+  <div id="edgeHint"></div>
   <div id="debug"></div>
 
   <div id="controls">
@@ -117,391 +242,113 @@
 
 <script>
 (() => {
-  const TARGET = { lat: 37.566826, lon: 126.9786567 };
+  const TARGET = { lat: 37.5668260, lon: 126.9786567 };
 
-  const video = document.getElementById('camera');
-  const startBtn = document.getElementById('startBtn');
-  const debugBtn = document.getElementById('debugBtn');
-  const arrowWrap = document.getElementById('arrowWrap');
-  const guideRibbon = document.getElementById('guideRibbon');
-  const guideHighlight = document.getElementById('guideHighlight');
-  const routeStopNear = document.getElementById('routeStopNear');
-  const routeStopFar = document.getElementById('routeStopFar');
-  const label = document.getElementById('label');
-  const edge = document.getElementById('edge');
+  // 카메라 실제 FOV를 웹에서 정확히 얻기 어렵기 때문에 일반 후면 광각의
+  // 체감값을 사용한다. 화면 밖 목표도 유도선 곡률에는 계속 반영한다.
+  const H_FOV = 64;
+
+  const camera = document.getElementById('camera');
+  const routeRibbon = document.getElementById('routeRibbon');
+  const routeShadow = document.getElementById('routeShadow');
+  const routeCore = document.getElementById('routeCore');
+  const routeArrow = document.getElementById('routeArrow');
+
+  const targetMarker = document.getElementById('targetMarker');
+  const targetLabel = document.getElementById('targetLabel');
+  const edgeHint = document.getElementById('edgeHint');
+
   const gpsStatus = document.getElementById('gpsStatus');
   const headingStatus = document.getElementById('headingStatus');
   const debug = document.getElementById('debug');
+  const startBtn = document.getElementById('startBtn');
+  const debugBtn = document.getElementById('debugBtn');
 
   let currentPos = null;
-  let currentHeading = null;
   let targetBearing = null;
   let targetDistance = null;
-  let lastHeading = null;
-  let smoothRouteX = null;
-  let smoothRouteDiff = 0;
 
-  const H_FOV = 60;
+  // raw sensor state
+  let rawHeading = null;
+
+  // filtered state
+  let filteredHeading = null;
+  let visualDiff = 0;
+  let desiredDiff = 0;
+
+  let rafId = null;
+  let started = false;
 
   function toRad(d){ return d * Math.PI / 180; }
   function toDeg(r){ return r * 180 / Math.PI; }
   function norm360(d){ return (d % 360 + 360) % 360; }
   function norm180(d){ return ((d + 540) % 360) - 180; }
+  function clamp(v,a,b){ return Math.max(a,Math.min(b,v)); }
+  function lerp(a,b,t){ return a + (b-a)*t; }
 
   function haversine(lat1, lon1, lat2, lon2){
     const R = 6371000;
     const p1 = toRad(lat1), p2 = toRad(lat2);
     const dp = toRad(lat2-lat1), dl = toRad(lon2-lon1);
-    const a = Math.sin(dp/2)**2 + Math.cos(p1)*Math.cos(p2)*Math.sin(dl/2)**2;
-    return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    const a = Math.sin(dp/2)**2 +
+      Math.cos(p1)*Math.cos(p2)*Math.sin(dl/2)**2;
+    return 2*R*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
   }
 
   function bearing(lat1, lon1, lat2, lon2){
-    const p1 = toRad(lat1), p2 = toRad(lat2), dl = toRad(lon2-lon1);
-    const y = Math.sin(dl) * Math.cos(p2);
-    const x = Math.cos(p1)*Math.sin(p2) - Math.sin(p1)*Math.cos(p2)*Math.cos(dl);
-    return norm360(toDeg(Math.atan2(y, x)));
+    const p1 = toRad(lat1), p2 = toRad(lat2);
+    const dl = toRad(lon2-lon1);
+    const y = Math.sin(dl)*Math.cos(p2);
+    const x = Math.cos(p1)*Math.sin(p2) -
+      Math.sin(p1)*Math.cos(p2)*Math.cos(dl);
+    return norm360(toDeg(Math.atan2(y,x)));
   }
 
-  function smoothHeading(newH){
-    if (lastHeading == null) {
-      lastHeading = newH;
-      return newH;
-    }
-
-    let diff = norm180(newH - lastHeading);
-
-    // 1.2° 이하는 센서 노이즈로 보고 무시.
-    if(Math.abs(diff) < 1.2){
-      return lastHeading;
-    }
-
-    // 큰 회전에는 따라가되, 작은 흔들림에는 둔감하게.
-    const alpha =
-      Math.abs(diff) > 20 ? 0.20 :
-      Math.abs(diff) > 8  ? 0.13 :
-                           0.075;
-
-    lastHeading = norm360(lastHeading + diff * alpha);
-    return lastHeading;
+  function formatDistance(m){
+    if(m == null) return '';
+    if(m < 1000) return `${Math.round(m).toLocaleString()} m`;
+    return `${(m/1000).toFixed(1)} km`;
   }
 
-  function updateTarget(){
+  function updateTargetFromGps(){
     if(!currentPos) return;
+
     targetBearing = bearing(
       currentPos.latitude, currentPos.longitude,
       TARGET.lat, TARGET.lon
     );
+
     targetDistance = haversine(
       currentPos.latitude, currentPos.longitude,
       TARGET.lat, TARGET.lon
     );
-    render();
+
+    targetLabel.textContent = `목표 ${formatDistance(targetDistance)}`;
   }
 
-  function setGuideRibbonEnd(x, y, angleDiff = 0){
-    const W = window.innerWidth;
-    const H = window.innerHeight;
+  function ingestHeading(newHeading){
+    if(!Number.isFinite(newHeading)) return;
 
-    // 유도선의 반응은 마커보다 더 느리게 하여 센서 떨림을 억제한다.
-    if(smoothRouteX == null) smoothRouteX = x;
+    rawHeading = norm360(newHeading);
 
-    const xDelta = x - smoothRouteX;
-    if(Math.abs(xDelta) > 2.2){
-      const xAlpha =
-        Math.abs(xDelta) > 100 ? 0.15 :
-        Math.abs(xDelta) > 40  ? 0.09 :
-                                0.045;
-      smoothRouteX += xDelta * xAlpha;
-    }
-
-    const diffDelta = norm180(angleDiff - smoothRouteDiff);
-    if(Math.abs(diffDelta) > 1.0){
-      const dAlpha =
-        Math.abs(diffDelta) > 45 ? 0.13 :
-        Math.abs(diffDelta) > 15 ? 0.08 :
-                                  0.045;
-      smoothRouteDiff = norm180(smoothRouteDiff + diffDelta * dAlpha);
-    }
-
-    const startX = W / 2;
-    const startY = H + 105;
-
-    // 중요: 꺾임 기준 높이는 "목표 마커와 같은 가로축".
-    // 즉 목표 마커의 Y 높이에서만 방향 전환이 일어난다.
-    const targetX = smoothRouteX;
-    const targetY = y + 42;
-    const turnY = targetY;
-
-    const startWidth = Math.min(220, W * 0.48);
-    const endWidth = 18;
-
-    const absDiff = Math.abs(smoothRouteDiff);
-    const turnSign = smoothRouteDiff >= 0 ? 1 : -1;
-
-    // 0° 근처는 직선.
-    const straightAngle = 5;
-
-    const center = [];
-
-    function pushLine(ax, ay, bx, by, steps, skipFirst=false){
-      for(let i=skipFirst ? 1 : 0; i<=steps; i++){
-        const t = i / steps;
-        center.push({
-          x: ax + (bx-ax)*t,
-          y: ay + (by-ay)*t
-        });
-      }
-    }
-
-    function pushArc(cx, cy, radius, a0, a1, steps, skipFirst=true){
-      for(let i=skipFirst ? 1 : 0; i<=steps; i++){
-        const t = i / steps;
-        const a = a0 + (a1-a0)*t;
-        center.push({
-          x: cx + Math.cos(a)*radius,
-          y: cy + Math.sin(a)*radius
-        });
-      }
-    }
-
-    if(absDiff <= straightAngle){
-      // 목표와 거의 정렬되었을 때만 완전 직선.
-      pushLine(startX, startY, targetX, targetY, 52);
-    } else if(absDiff <= 100){
-      // 90° 계열:
-      // 하단 중앙 -> 목표 마커와 같은 높이까지 직진
-      // -> 바로 그 높이에서 좌/우로 꺾여 목표로 이동.
-      //
-      // 화면 중앙 직진부는 targetY까지 올라간다.
-      const cornerRadius = Math.min(
-        36,
-        Math.max(14, Math.abs(targetX-startX) * 0.15)
-      );
-
-      // 코너의 시작점은 targetY 바로 아래.
-      const verticalEndY = turnY + cornerRadius;
-      pushLine(startX, startY, startX, verticalEndY, 34);
-
-      // 90° 둥근 코너. 꺾임 중심 높이는 목표 마커의 가로축 기준.
-      const cx = startX + turnSign * cornerRadius;
-      const cy = turnY + cornerRadius;
-
-      if(turnSign > 0){
-        pushArc(cx, cy, cornerRadius, Math.PI, Math.PI*1.5, 10);
-      }else{
-        pushArc(cx, cy, cornerRadius, 0, -Math.PI/2, 10);
-      }
-
-      // 코너 종료 후에는 목표 마커와 정확히 같은 Y축 선상에서 수평 진행.
-      const horizontalStartX = startX + turnSign * cornerRadius;
-      pushLine(horizontalStartX, turnY, targetX, turnY, 24, true);
-
-    } else {
-      // 100°~180°:
-      // 같은 목표 높이에서 방향을 꺾은 뒤 hairpin/U-turn으로 표현.
-      // 180°에 가까울수록 반원에 가까운 형태가 된다.
-      const radius = Math.min(58, Math.max(30, W * 0.10));
-
-      // 먼저 목표 높이까지 직진.
-      const verticalEndY = turnY + radius;
-      pushLine(startX, startY, startX, verticalEndY, 34);
-
-      // 90° 코너로 목표 높이 진입.
-      const cx1 = startX + turnSign * radius;
-      const cy1 = turnY + radius;
-
-      if(turnSign > 0){
-        pushArc(cx1, cy1, radius, Math.PI, Math.PI*1.5, 12);
-      }else{
-        pushArc(cx1, cy1, radius, 0, -Math.PI/2, 12);
-      }
-
-      // 90°를 넘는 초과 각도를 최대 80° 추가로 말아준다.
-      // 결과적으로 약 180° U-turn까지 시각적으로 표현.
-      const extra = Math.min(80, absDiff - 100);
-      const extraRad = extra * Math.PI / 180;
-
-      const arcStartX = startX + turnSign * radius;
-      const arcStartY = turnY;
-      const cx2 = arcStartX;
-      const cy2 = turnY - turnSign * 0; // 가로축 유지용 중심 기준
-
-      // hairpin 반경은 별도 작은 원으로 표현.
-      const hairR = radius * 0.78;
-      const hairCx = arcStartX + turnSign * hairR;
-      const hairCy = turnY;
-
-      if(turnSign > 0){
-        // 좌측 시작점에서 오른쪽으로 감기며 최대 180°.
-        pushArc(hairCx, hairCy, hairR, Math.PI, Math.PI - (Math.PI/2 + extraRad), 18);
-      }else{
-        pushArc(hairCx, hairCy, hairR, 0, Math.PI/2 + extraRad, 18);
-      }
-
-      // 마지막 점에서 목표/가장자리 마커 방향으로 연결.
-      const last = center[center.length-1];
-      pushLine(last.x, last.y, targetX, targetY, 20, true);
-    }
-
-    // 누적 거리 기준으로 가까운 곳은 넓고 먼 곳은 좁은 바닥 원근 적용.
-    const lengths = [0];
-    let total = 0;
-    for(let i=1;i<center.length;i++){
-      total += Math.hypot(
-        center[i].x-center[i-1].x,
-        center[i].y-center[i-1].y
-      );
-      lengths.push(total);
-    }
-    total = total || 1;
-
-    const left = [];
-    const right = [];
-
-    for(let i=0;i<center.length;i++){
-      const p = center[i];
-      const prev = center[Math.max(0,i-1)];
-      const next = center[Math.min(center.length-1,i+1)];
-
-      const tx = next.x-prev.x;
-      const ty = next.y-prev.y;
-      const len = Math.hypot(tx,ty) || 1;
-
-      const nx = -ty/len;
-      const ny = tx/len;
-
-      const t = lengths[i]/total;
-      const perspective = 1 - Math.pow(1-t, 2.5);
-      const width = startWidth + (endWidth-startWidth)*perspective;
-      const half = width/2;
-
-      left.push([p.x+nx*half, p.y+ny*half]);
-      right.push([p.x-nx*half, p.y-ny*half]);
-    }
-
-    let d = `M ${left[0][0]} ${left[0][1]}`;
-    for(let i=1;i<left.length;i++) d += ` L ${left[i][0]} ${left[i][1]}`;
-    for(let i=right.length-1;i>=0;i--) d += ` L ${right[i][0]} ${right[i][1]}`;
-    d += ' Z';
-    guideRibbon.setAttribute('d', d);
-
-    let centerD = `M ${center[0].x} ${center[0].y}`;
-    for(let i=1;i<center.length;i++){
-      centerD += ` L ${center[i].x} ${center[i].y}`;
-    }
-    guideHighlight.setAttribute('d', centerD);
-
-    // 0° = 진한 파랑, 180° = 주황.
-    const severity = Math.min(1, absDiff/180);
-    const hue = 215 + (30-215)*Math.pow(severity,0.72);
-    const sat = 96;
-    const lightNear = 47 + 5*severity;
-    const lightFar = 54 + 3*severity;
-
-    routeStopNear.setAttribute(
-      'stop-color',
-      `hsl(${hue} ${sat}% ${lightNear}%)`
-    );
-    routeStopFar.setAttribute(
-      'stop-color',
-      `hsl(${hue} ${sat}% ${lightFar}%)`
-    );
-    routeStopNear.setAttribute(
-      'stop-opacity',
-      String(0.70 - 0.10*severity)
-    );
-    routeStopFar.setAttribute(
-      'stop-opacity',
-      String(0.50 - 0.08*severity)
-    );
-  }
-
-  function render(){
-    if(targetDistance != null){
-      const d = targetDistance < 1000
-        ? `${Math.round(targetDistance).toLocaleString()} m`
-        : `${(targetDistance/1000).toFixed(1)} km`;
-      label.textContent = `목표 ${d}`;
-    }
-
-    if(currentHeading == null || targetBearing == null){
-      setGuideRibbonEnd(window.innerWidth / 2, window.innerHeight / 2, 0);
+    if(filteredHeading == null){
+      filteredHeading = rawHeading;
       return;
     }
 
-    const diff = norm180(targetBearing - currentHeading);
-    const half = H_FOV / 2;
+    const delta = norm180(rawHeading - filteredHeading);
 
-    headingStatus.textContent = `방향 ${Math.round(currentHeading)}°`;
+    // 0.8도 이하는 사실상 정지로 취급.
+    if(Math.abs(delta) < 0.8) return;
 
-    if(Math.abs(diff) <= half){
-      edge.style.display = 'none';
-      arrowWrap.style.display = 'flex';
+    // 센서가 크게 움직이면 따라가고, 작은 흔들림은 강하게 억제.
+    const alpha =
+      Math.abs(delta) > 35 ? 0.18 :
+      Math.abs(delta) > 15 ? 0.115 :
+      Math.abs(delta) > 6  ? 0.075 :
+                             0.045;
 
-      const usable = window.innerWidth * 0.76;
-      let x = window.innerWidth/2 + (diff / half) * (usable/2);
-
-      if(Math.abs(diff) < 4) x = window.innerWidth/2;
-
-      const arrowY = window.innerHeight / 2;
-      arrowWrap.style.left = `${x}px`;
-      arrowWrap.style.opacity = '1';
-      setGuideRibbonEnd(x, arrowY, diff);
-    } else {
-      arrowWrap.style.display = 'none';
-      edge.style.display = 'flex';
-
-      const edgeY = window.innerHeight / 2;
-      if(diff < 0){
-        edge.className = 'left';
-        edge.textContent = `← 목표 ${targetDistance ? Math.round(targetDistance).toLocaleString() + ' m' : ''}`;
-        setGuideRibbonEnd(18, edgeY, diff);
-      } else {
-        edge.className = 'right';
-        edge.textContent = `목표 ${targetDistance ? Math.round(targetDistance).toLocaleString() + ' m' : ''} →`;
-        setGuideRibbonEnd(window.innerWidth - 18, edgeY, diff);
-      }
-    }
-
-    debug.textContent =
-`목표: ${TARGET.lat}, ${TARGET.lon}
-현재: ${currentPos ? currentPos.latitude.toFixed(7)+', '+currentPos.longitude.toFixed(7) : '-'}
-거리: ${targetDistance != null ? targetDistance.toFixed(1)+' m' : '-'}
-목표 방위각: ${targetBearing != null ? targetBearing.toFixed(1)+'°' : '-'}
-현재 헤딩: ${currentHeading != null ? currentHeading.toFixed(1)+'°' : '-'}
-각도 차이: ${diff.toFixed(1)}°`;
-  }
-
-  async function startCamera(){
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: 'environment' } },
-      audio: false
-    });
-    video.srcObject = stream;
-  }
-
-  function startGPS(){
-    if(!navigator.geolocation){
-      gpsStatus.textContent = 'GPS 미지원';
-      return;
-    }
-    navigator.geolocation.watchPosition(pos => {
-      currentPos = {
-        latitude: pos.coords.latitude,
-        longitude: pos.coords.longitude,
-        accuracy: pos.coords.accuracy
-      };
-      gpsStatus.textContent = `GPS ±${Math.round(pos.coords.accuracy)}m`;
-      updateTarget();
-    }, err => {
-      gpsStatus.textContent = `GPS 오류`;
-      console.error(err);
-    }, {
-      enableHighAccuracy: true,
-      maximumAge: 500,
-      timeout: 15000
-    });
+    filteredHeading = norm360(filteredHeading + delta*alpha);
   }
 
   function handleOrientation(e){
@@ -509,13 +356,235 @@
 
     if(typeof e.webkitCompassHeading === 'number'){
       h = e.webkitCompassHeading;
-    } else if(typeof e.alpha === 'number'){
+    }else if(typeof e.alpha === 'number'){
       h = 360 - e.alpha;
     }
 
-    if(h == null || !isFinite(h)) return;
-    currentHeading = smoothHeading(norm360(h));
-    render();
+    if(h != null) ingestHeading(h);
+  }
+
+  function buildRoute(diff){
+    const W = window.innerWidth;
+    const H = window.innerHeight;
+
+    // 이미지 레퍼런스처럼 경로는 화면의 "도로 영역" 안에만 존재.
+    const start = { x: W*0.5, y: H + 72 };
+    const farY = H*0.47;
+
+    // 화면상의 목표 위치. FOV 바깥이면 edge보다 조금 안쪽에서 경로가 끝난다.
+    const screenRatio = clamp(diff/(H_FOV/2), -1.45, 1.45);
+    const endX = W*0.5 + screenRatio*(W*0.38);
+    const end = { x: endX, y: farY };
+
+    // 회전량 0~180을 0~1로.
+    const turn = clamp(Math.abs(diff)/180, 0, 1);
+    const sign = diff >= 0 ? 1 : -1;
+
+    // 레퍼런스 핵심:
+    // 시작은 거의 곧게 뻗고, 필요할 때만 중후반부터 부드럽게 휜다.
+    // 90° 이상에서는 곡률을 과장하지만 화면 안에서 끊김 없이 유지.
+    const curveEase = Math.pow(turn, 0.72);
+
+    const c1 = {
+      x: start.x + sign*W*(0.015 + 0.035*curveEase),
+      y: lerp(start.y, end.y, 0.40)
+    };
+
+    const c2 = {
+      x: end.x - sign*W*(0.05 + 0.23*curveEase),
+      y: lerp(start.y, end.y, 0.72)
+    };
+
+    function point(t){
+      const mt = 1-t;
+      return {
+        x: mt*mt*mt*start.x +
+           3*mt*mt*t*c1.x +
+           3*mt*t*t*c2.x +
+           t*t*t*end.x,
+        y: mt*mt*mt*start.y +
+           3*mt*mt*t*c1.y +
+           3*mt*t*t*c2.y +
+           t*t*t*end.y
+      };
+    }
+
+    const pts = [];
+    const steps = 56;
+    for(let i=0;i<=steps;i++) pts.push(point(i/steps));
+
+    const lengths = [0];
+    let total = 0;
+    for(let i=1;i<pts.length;i++){
+      total += Math.hypot(
+        pts[i].x-pts[i-1].x,
+        pts[i].y-pts[i-1].y
+      );
+      lengths.push(total);
+    }
+    total ||= 1;
+
+    const left = [];
+    const right = [];
+
+    for(let i=0;i<pts.length;i++){
+      const prev = pts[Math.max(0,i-1)];
+      const next = pts[Math.min(pts.length-1,i+1)];
+      const dx = next.x-prev.x;
+      const dy = next.y-prev.y;
+      const len = Math.hypot(dx,dy) || 1;
+
+      const nx = -dy/len;
+      const ny = dx/len;
+
+      const t = lengths[i]/total;
+
+      // 바닥 원근 핵심:
+      // 화면 가까운 쪽은 매우 넓고, 먼 쪽은 급격히 좁아진다.
+      // 실제 HUD 이미지와 비슷하게 리본 자체가 "눕혀진" 인상을 만든다.
+      const perspective = 1-Math.pow(1-t,2.65);
+      const nearWidth = Math.min(W*0.34, 170);
+      const farWidth = 24;
+      const width = lerp(nearWidth, farWidth, perspective);
+      const half = width/2;
+
+      left.push({x:pts[i].x+nx*half,y:pts[i].y+ny*half});
+      right.push({x:pts[i].x-nx*half,y:pts[i].y-ny*half});
+    }
+
+    function polygonPath(L,R){
+      let d = `M ${L[0].x} ${L[0].y}`;
+      for(let i=1;i<L.length;i++) d += ` L ${L[i].x} ${L[i].y}`;
+      for(let i=R.length-1;i>=0;i--) d += ` L ${R[i].x} ${R[i].y}`;
+      return d+' Z';
+    }
+
+    const ribbonD = polygonPath(left,right);
+
+    // 중앙 하이라이트
+    let coreD = `M ${pts[0].x} ${pts[0].y}`;
+    for(let i=1;i<pts.length;i++){
+      coreD += ` L ${pts[i].x} ${pts[i].y}`;
+    }
+
+    // 끝 화살촉을 리본과 한 몸처럼 생성.
+    const pEnd = pts[pts.length-1];
+    const pPrev = pts[pts.length-4];
+    const vx = pEnd.x-pPrev.x;
+    const vy = pEnd.y-pPrev.y;
+    const vlen = Math.hypot(vx,vy)||1;
+    const ux = vx/vlen;
+    const uy = vy/vlen;
+    const nx = -uy;
+    const ny = ux;
+
+    const arrowLen = clamp(H*0.075, 42, 72);
+    const arrowHalf = 28;
+    const baseBack = {
+      x:pEnd.x-ux*arrowLen*0.72,
+      y:pEnd.y-uy*arrowLen*0.72
+    };
+    const arrowD =
+      `M ${pEnd.x+ux*arrowLen*0.38} ${pEnd.y+uy*arrowLen*0.38}` +
+      ` L ${baseBack.x+nx*arrowHalf} ${baseBack.y+ny*arrowHalf}` +
+      ` L ${pEnd.x-ux*arrowLen*0.08} ${pEnd.y-uy*arrowLen*0.08}` +
+      ` L ${baseBack.x-nx*arrowHalf} ${baseBack.y-ny*arrowHalf} Z`;
+
+    return { ribbonD, coreD, arrowD, end };
+  }
+
+  function renderRoute(){
+    if(filteredHeading != null && targetBearing != null){
+      desiredDiff = norm180(targetBearing-filteredHeading);
+    }
+
+    // 센서 필터와 별도로 화면 그래픽에도 easing.
+    const delta = norm180(desiredDiff-visualDiff);
+    const visualAlpha =
+      Math.abs(delta) > 60 ? 0.095 :
+      Math.abs(delta) > 20 ? 0.065 :
+                             0.035;
+
+    visualDiff += delta*visualAlpha;
+
+    const route = buildRoute(visualDiff);
+    routeRibbon.setAttribute('d',route.ribbonD);
+    routeShadow.setAttribute('d',route.ribbonD);
+    routeCore.setAttribute('d',route.coreD);
+    routeArrow.setAttribute('d',route.arrowD);
+
+    const W = window.innerWidth;
+    const halfFov = H_FOV/2;
+    const onScreen = Math.abs(visualDiff) <= halfFov;
+
+    if(onScreen){
+      const x = W*0.5 + (visualDiff/halfFov)*(W*0.38);
+      targetMarker.style.display = 'flex';
+      targetMarker.style.left = `${x}px`;
+      targetMarker.style.top = `${window.innerHeight*0.40}px`;
+      edgeHint.style.display = 'none';
+    }else{
+      targetMarker.style.display = 'none';
+      edgeHint.style.display = 'flex';
+      if(visualDiff < 0){
+        edgeHint.className = 'left';
+        edgeHint.textContent = `← 목표 ${formatDistance(targetDistance)}`;
+      }else{
+        edgeHint.className = 'right';
+        edgeHint.textContent = `목표 ${formatDistance(targetDistance)} →`;
+      }
+    }
+
+    if(filteredHeading != null){
+      headingStatus.textContent = `방향 ${Math.round(filteredHeading)}°`;
+    }
+
+    debug.textContent =
+`목표: ${TARGET.lat}, ${TARGET.lon}
+현재: ${currentPos ? currentPos.latitude.toFixed(7)+', '+currentPos.longitude.toFixed(7) : '-'}
+거리: ${targetDistance != null ? targetDistance.toFixed(1)+' m' : '-'}
+목표 방위각: ${targetBearing != null ? targetBearing.toFixed(1)+'°' : '-'}
+필터 헤딩: ${filteredHeading != null ? filteredHeading.toFixed(1)+'°' : '-'}
+방향 차이: ${visualDiff.toFixed(1)}°`;
+
+    rafId = requestAnimationFrame(renderRoute);
+  }
+
+  async function startCamera(){
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: { ideal: 'environment' },
+        width: { ideal: 1920 },
+        height: { ideal: 1080 }
+      },
+      audio: false
+    });
+    camera.srcObject = stream;
+  }
+
+  function startGPS(){
+    if(!navigator.geolocation){
+      gpsStatus.textContent = 'GPS 미지원';
+      return;
+    }
+
+    navigator.geolocation.watchPosition(pos=>{
+      currentPos = {
+        latitude: pos.coords.latitude,
+        longitude: pos.coords.longitude,
+        accuracy: pos.coords.accuracy
+      };
+
+      gpsStatus.textContent = `GPS ±${Math.round(pos.coords.accuracy)}m`;
+      updateTargetFromGps();
+    },err=>{
+      gpsStatus.textContent = 'GPS 오류';
+      console.error(err);
+    },{
+      enableHighAccuracy:true,
+      maximumAge:400,
+      timeout:15000
+    });
   }
 
   async function startOrientation(){
@@ -526,35 +595,48 @@
     }
 
     if('ondeviceorientationabsolute' in window){
-      window.addEventListener('deviceorientationabsolute', handleOrientation, true);
-    } else {
-      window.addEventListener('deviceorientation', handleOrientation, true);
+      window.addEventListener('deviceorientationabsolute',handleOrientation,true);
+    }else{
+      window.addEventListener('deviceorientation',handleOrientation,true);
     }
   }
 
-  startBtn.addEventListener('click', async () => {
+  startBtn.addEventListener('click',async()=>{
+    if(started) return;
+
     startBtn.disabled = true;
     startBtn.textContent = '시작 중…';
+
     try{
       await startCamera();
       startGPS();
       await startOrientation();
+
+      started = true;
       startBtn.textContent = '실행 중';
+
+      if(!rafId) rafId = requestAnimationFrame(renderRoute);
     }catch(err){
       console.error(err);
       startBtn.disabled = false;
-      startBtn.textContent = '권한을 확인하고 다시 시작';
-      alert('카메라/위치/방향 센서 권한을 허용해주세요. 이 기능은 HTTPS 환경에서 실행하는 것이 가장 안정적입니다.');
+      startBtn.textContent = '권한 확인 후 다시 시작';
+      alert('카메라·위치·방향 센서 권한을 허용해주세요. HTTPS 환경에서 실행해주세요.');
     }
   });
 
-  window.addEventListener('resize', render);
-
-  debugBtn.addEventListener('click', () => {
+  debugBtn.addEventListener('click',()=>{
     debug.style.display = debug.style.display === 'none' ? 'block' : 'none';
   });
 
-  render();
+  window.addEventListener('resize',()=>{
+    if(!rafId) renderRoute();
+  });
+
+  // 권한 전에도 레이아웃 형태는 보이도록 초기 렌더.
+  routeRibbon.setAttribute('d','');
+  routeShadow.setAttribute('d','');
+  routeCore.setAttribute('d','');
+  routeArrow.setAttribute('d','');
 })();
 </script>
 </body>
