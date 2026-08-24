@@ -94,7 +94,7 @@
     <path id="guideHighlight" d=""></path>
   </svg>
 
-  <div id="versionLabel">v1.7</div>
+  <div id="versionLabel">v1.8</div>
 
   <div id="status">
     <div class="pill" id="gpsStatus">GPS 대기</div>
@@ -203,93 +203,154 @@
     const W = window.innerWidth;
     const H = window.innerHeight;
 
-    // 유도선 좌표 안정화
+    // 유도선의 반응은 마커보다 더 느리게 하여 센서 떨림을 억제한다.
     if(smoothRouteX == null) smoothRouteX = x;
 
     const xDelta = x - smoothRouteX;
-    if(Math.abs(xDelta) > 1.8){
+    if(Math.abs(xDelta) > 2.2){
       const xAlpha =
-        Math.abs(xDelta) > 80 ? 0.16 :
-        Math.abs(xDelta) > 30 ? 0.10 :
-                               0.055;
+        Math.abs(xDelta) > 100 ? 0.15 :
+        Math.abs(xDelta) > 40  ? 0.09 :
+                                0.045;
       smoothRouteX += xDelta * xAlpha;
     }
 
-    const diffDelta = angleDiff - smoothRouteDiff;
-    if(Math.abs(diffDelta) > 0.9){
-      const dAlpha = Math.abs(diffDelta) > 15 ? 0.14 : 0.06;
-      smoothRouteDiff += diffDelta * dAlpha;
+    const diffDelta = norm180(angleDiff - smoothRouteDiff);
+    if(Math.abs(diffDelta) > 1.0){
+      const dAlpha =
+        Math.abs(diffDelta) > 45 ? 0.13 :
+        Math.abs(diffDelta) > 15 ? 0.08 :
+                                  0.045;
+      smoothRouteDiff = norm180(smoothRouteDiff + diffDelta * dAlpha);
     }
 
+    const startX = W / 2;
+    const startY = H + 105;
+
+    // 중요: 꺾임 기준 높이는 "목표 마커와 같은 가로축".
+    // 즉 목표 마커의 Y 높이에서만 방향 전환이 일어난다.
     const targetX = smoothRouteX;
     const targetY = y + 42;
-
-    // 화면 아래에서 시작해 바닥에 깔린 느낌 유지
-    const startX = W / 2;
-    const startY = H + 110;
+    const turnY = targetY;
 
     const startWidth = Math.min(220, W * 0.48);
     const endWidth = 18;
 
-    const dxToTarget = targetX - startX;
-    const absDx = Math.abs(dxToTarget);
+    const absDiff = Math.abs(smoothRouteDiff);
+    const turnSign = smoothRouteDiff >= 0 ? 1 : -1;
 
-    // 거의 정면일 때는 꺾임 없이 직선으로 수렴
-    const straightThreshold = Math.max(14, W * 0.035);
-    const isStraight = absDx <= straightThreshold;
+    // 0° 근처는 직선.
+    const straightAngle = 5;
 
     const center = [];
 
-    if(isStraight){
-      // 정면: 하나의 직선 경로
-      const steps = 46;
-      for(let i=0;i<=steps;i++){
+    function pushLine(ax, ay, bx, by, steps, skipFirst=false){
+      for(let i=skipFirst ? 1 : 0; i<=steps; i++){
         const t = i / steps;
         center.push({
-          x: startX + (targetX - startX) * t,
-          y: startY + (targetY - startY) * t
-        });
-      }
-    } else {
-      // 핵심:
-      // 꺾임은 목표 마커와 "동일한 X축"에서만 발생한다.
-      // 1) 하단 중앙 -> 목표 X축의 bend 지점까지 직선
-      // 2) 그 자리에서 90도 꺾여 목표까지 수직 진행
-      //
-      // bendY는 목표보다 아래에 위치하며, 목표 X축과 정확히 일치.
-      const verticalGap = Math.max(105, Math.min(180, (startY - targetY) * 0.30));
-      const bendX = targetX;
-      const bendY = targetY + verticalGap;
-
-      const seg1 = 34;
-      const seg2 = 18;
-
-      // 첫 번째 직선 구간
-      for(let i=0;i<=seg1;i++){
-        const t = i / seg1;
-        center.push({
-          x: startX + (bendX - startX) * t,
-          y: startY + (bendY - startY) * t
-        });
-      }
-
-      // 같은 X축에서 90° 꺾인 뒤 수직으로 목표까지
-      for(let i=1;i<=seg2;i++){
-        const t = i / seg2;
-        center.push({
-          x: bendX,
-          y: bendY + (targetY - bendY) * t
+          x: ax + (bx-ax)*t,
+          y: ay + (by-ay)*t
         });
       }
     }
 
-    // 누적 거리 기반 원근 폭 계산
+    function pushArc(cx, cy, radius, a0, a1, steps, skipFirst=true){
+      for(let i=skipFirst ? 1 : 0; i<=steps; i++){
+        const t = i / steps;
+        const a = a0 + (a1-a0)*t;
+        center.push({
+          x: cx + Math.cos(a)*radius,
+          y: cy + Math.sin(a)*radius
+        });
+      }
+    }
+
+    if(absDiff <= straightAngle){
+      // 목표와 거의 정렬되었을 때만 완전 직선.
+      pushLine(startX, startY, targetX, targetY, 52);
+    } else if(absDiff <= 100){
+      // 90° 계열:
+      // 하단 중앙 -> 목표 마커와 같은 높이까지 직진
+      // -> 바로 그 높이에서 좌/우로 꺾여 목표로 이동.
+      //
+      // 화면 중앙 직진부는 targetY까지 올라간다.
+      const cornerRadius = Math.min(
+        36,
+        Math.max(14, Math.abs(targetX-startX) * 0.15)
+      );
+
+      // 코너의 시작점은 targetY 바로 아래.
+      const verticalEndY = turnY + cornerRadius;
+      pushLine(startX, startY, startX, verticalEndY, 34);
+
+      // 90° 둥근 코너. 꺾임 중심 높이는 목표 마커의 가로축 기준.
+      const cx = startX + turnSign * cornerRadius;
+      const cy = turnY + cornerRadius;
+
+      if(turnSign > 0){
+        pushArc(cx, cy, cornerRadius, Math.PI, Math.PI*1.5, 10);
+      }else{
+        pushArc(cx, cy, cornerRadius, 0, -Math.PI/2, 10);
+      }
+
+      // 코너 종료 후에는 목표 마커와 정확히 같은 Y축 선상에서 수평 진행.
+      const horizontalStartX = startX + turnSign * cornerRadius;
+      pushLine(horizontalStartX, turnY, targetX, turnY, 24, true);
+
+    } else {
+      // 100°~180°:
+      // 같은 목표 높이에서 방향을 꺾은 뒤 hairpin/U-turn으로 표현.
+      // 180°에 가까울수록 반원에 가까운 형태가 된다.
+      const radius = Math.min(58, Math.max(30, W * 0.10));
+
+      // 먼저 목표 높이까지 직진.
+      const verticalEndY = turnY + radius;
+      pushLine(startX, startY, startX, verticalEndY, 34);
+
+      // 90° 코너로 목표 높이 진입.
+      const cx1 = startX + turnSign * radius;
+      const cy1 = turnY + radius;
+
+      if(turnSign > 0){
+        pushArc(cx1, cy1, radius, Math.PI, Math.PI*1.5, 12);
+      }else{
+        pushArc(cx1, cy1, radius, 0, -Math.PI/2, 12);
+      }
+
+      // 90°를 넘는 초과 각도를 최대 80° 추가로 말아준다.
+      // 결과적으로 약 180° U-turn까지 시각적으로 표현.
+      const extra = Math.min(80, absDiff - 100);
+      const extraRad = extra * Math.PI / 180;
+
+      const arcStartX = startX + turnSign * radius;
+      const arcStartY = turnY;
+      const cx2 = arcStartX;
+      const cy2 = turnY - turnSign * 0; // 가로축 유지용 중심 기준
+
+      // hairpin 반경은 별도 작은 원으로 표현.
+      const hairR = radius * 0.78;
+      const hairCx = arcStartX + turnSign * hairR;
+      const hairCy = turnY;
+
+      if(turnSign > 0){
+        // 좌측 시작점에서 오른쪽으로 감기며 최대 180°.
+        pushArc(hairCx, hairCy, hairR, Math.PI, Math.PI - (Math.PI/2 + extraRad), 18);
+      }else{
+        pushArc(hairCx, hairCy, hairR, 0, Math.PI/2 + extraRad, 18);
+      }
+
+      // 마지막 점에서 목표/가장자리 마커 방향으로 연결.
+      const last = center[center.length-1];
+      pushLine(last.x, last.y, targetX, targetY, 20, true);
+    }
+
+    // 누적 거리 기준으로 가까운 곳은 넓고 먼 곳은 좁은 바닥 원근 적용.
     const lengths = [0];
     let total = 0;
     for(let i=1;i<center.length;i++){
       total += Math.hypot(
-        center[i].x - center[i-1].x,
-        center[i].y - center[i-1].y
+        center[i].x-center[i-1].x,
+        center[i].y-center[i-1].y
       );
       lengths.push(total);
     }
@@ -300,50 +361,43 @@
 
     for(let i=0;i<center.length;i++){
       const p = center[i];
-      const prev = center[Math.max(0, i-1)];
-      const next = center[Math.min(center.length-1, i+1)];
+      const prev = center[Math.max(0,i-1)];
+      const next = center[Math.min(center.length-1,i+1)];
 
-      const tx = next.x - prev.x;
-      const ty = next.y - prev.y;
-      const len = Math.hypot(tx, ty) || 1;
+      const tx = next.x-prev.x;
+      const ty = next.y-prev.y;
+      const len = Math.hypot(tx,ty) || 1;
 
-      const nx = -ty / len;
-      const ny = tx / len;
+      const nx = -ty/len;
+      const ny = tx/len;
 
-      const t = lengths[i] / total;
+      const t = lengths[i]/total;
+      const perspective = 1 - Math.pow(1-t, 2.5);
+      const width = startWidth + (endWidth-startWidth)*perspective;
+      const half = width/2;
 
-      // 가까운 쪽에서 크게 좁아지며 바닥 원근감 형성
-      const perspective = 1 - Math.pow(1 - t, 2.35);
-      const width = startWidth + (endWidth - startWidth) * perspective;
-      const half = width / 2;
-
-      left.push([p.x + nx * half, p.y + ny * half]);
-      right.push([p.x - nx * half, p.y - ny * half]);
+      left.push([p.x+nx*half, p.y+ny*half]);
+      right.push([p.x-nx*half, p.y-ny*half]);
     }
 
     let d = `M ${left[0][0]} ${left[0][1]}`;
-    for(let i=1;i<left.length;i++){
-      d += ` L ${left[i][0]} ${left[i][1]}`;
-    }
-    for(let i=right.length-1;i>=0;i--){
-      d += ` L ${right[i][0]} ${right[i][1]}`;
-    }
+    for(let i=1;i<left.length;i++) d += ` L ${left[i][0]} ${left[i][1]}`;
+    for(let i=right.length-1;i>=0;i--) d += ` L ${right[i][0]} ${right[i][1]}`;
     d += ' Z';
     guideRibbon.setAttribute('d', d);
 
-    // 중앙 HUD 라인도 동일한 L자 경로 사용
     let centerD = `M ${center[0].x} ${center[0].y}`;
     for(let i=1;i<center.length;i++){
       centerD += ` L ${center[i].x} ${center[i].y}`;
     }
     guideHighlight.setAttribute('d', centerD);
 
-    // 방향 차이에 따른 색상
-    const severity = Math.min(1, Math.abs(smoothRouteDiff) / 32);
-    const hue = 215 + (30 - 215) * Math.pow(severity, 0.82);
+    // 0° = 진한 파랑, 180° = 주황.
+    const severity = Math.min(1, absDiff/180);
+    const hue = 215 + (30-215)*Math.pow(severity,0.72);
     const sat = 96;
-    const lightNear = 48 + 4 * severity;
-    const lightFar = 55 + 2 * severity;
+    const lightNear = 47 + 5*severity;
+    const lightFar = 54 + 3*severity;
 
     routeStopNear.setAttribute(
       'stop-color',
@@ -355,11 +409,11 @@
     );
     routeStopNear.setAttribute(
       'stop-opacity',
-      String(0.68 - 0.10 * severity)
+      String(0.70 - 0.10*severity)
     );
     routeStopFar.setAttribute(
       'stop-opacity',
-      String(0.48 - 0.08 * severity)
+      String(0.50 - 0.08*severity)
     );
   }
 
@@ -402,11 +456,11 @@
       if(diff < 0){
         edge.className = 'left';
         edge.textContent = `← 목표 ${targetDistance ? Math.round(targetDistance).toLocaleString() + ' m' : ''}`;
-        setGuideRibbonEnd(18, edgeY, -30);
+        setGuideRibbonEnd(18, edgeY, diff);
       } else {
         edge.className = 'right';
         edge.textContent = `목표 ${targetDistance ? Math.round(targetDistance).toLocaleString() + ' m' : ''} →`;
-        setGuideRibbonEnd(window.innerWidth - 18, edgeY, 30);
+        setGuideRibbonEnd(window.innerWidth - 18, edgeY, diff);
       }
     }
 
