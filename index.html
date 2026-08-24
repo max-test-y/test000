@@ -71,6 +71,18 @@
     fill: url(#arrowFill);
     filter: drop-shadow(0 2px 3px rgba(0,0,0,.18));
   }
+  #routeEndHalo{
+    fill:rgba(77,171,255,.18);
+    stroke:rgba(190,230,255,.65);
+    stroke-width:2;
+    filter:drop-shadow(0 2px 3px rgba(0,0,0,.18));
+  }
+  #routeEndDot{
+    fill:#d9f1ff;
+    stroke:#2f8fff;
+    stroke-width:4;
+    filter:drop-shadow(0 2px 3px rgba(0,0,0,.20));
+  }
 
   #topStatus {
     position: absolute;
@@ -101,17 +113,7 @@
   #headingStatus { justify-self: end; }
 
   #targetMarker {
-    position: absolute;
-    z-index: 7;
-    left: 50%;
-    top: 40%;
-    transform: translate(-50%,-50%);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 5px;
-    pointer-events: none;
-    transition: opacity .18s ease;
+    display:none !important;
   }
   #targetDot {
     width: 12px;
@@ -218,11 +220,13 @@
     <path id="routeRibbon"></path>
     <path id="routeCore"></path>
     <path id="routeArrow"></path>
+    <circle id="routeEndHalo" r="22"></circle>
+    <circle id="routeEndDot" r="8"></circle>
   </svg>
 
   <div id="topStatus">
     <div class="pill" id="gpsStatus">GPS 대기</div>
-    <div class="pill" id="versionLabel">v2.0</div>
+    <div class="pill" id="versionLabel">v2.1</div>
     <div class="pill" id="headingStatus">방향 대기</div>
   </div>
 
@@ -253,6 +257,8 @@
   const routeShadow = document.getElementById('routeShadow');
   const routeCore = document.getElementById('routeCore');
   const routeArrow = document.getElementById('routeArrow');
+  const routeEndHalo = document.getElementById('routeEndHalo');
+  const routeEndDot = document.getElementById('routeEndDot');
 
   const targetMarker = document.getElementById('targetMarker');
   const targetLabel = document.getElementById('targetLabel');
@@ -367,32 +373,56 @@
     const W = window.innerWidth;
     const H = window.innerHeight;
 
-    // 이미지 레퍼런스처럼 경로는 화면의 "도로 영역" 안에만 존재.
-    const start = { x: W*0.5, y: H + 72 };
-    const farY = H*0.47;
+    // 바닥에 "붙어 있는" 느낌을 위해 시작점을 화면 아래쪽으로 더 내리고,
+    // 먼 쪽 종점을 수평선보다 낮게 둔다.
+    const start = { x: W*0.50, y: H + 150 };
+    const endY = H*0.50;
 
-    // 화면상의 목표 위치. FOV 바깥이면 edge보다 조금 안쪽에서 경로가 끝난다.
-    const screenRatio = clamp(diff/(H_FOV/2), -1.45, 1.45);
-    const endX = W*0.5 + screenRatio*(W*0.38);
-    const end = { x: endX, y: farY };
+    const halfFov = H_FOV/2;
 
-    // 회전량 0~180을 0~1로.
-    const turn = clamp(Math.abs(diff)/180, 0, 1);
+    // 화면 내 목표 X. 화면 밖 방향도 끝점은 edge 안쪽에 유지.
+    const visibleRatio = clamp(diff/halfFov, -1.25, 1.25);
+    const endX = W*0.50 + visibleRatio*(W*0.35);
+    const end = { x:endX, y:endY };
+
+    const absDeg = Math.min(180, Math.abs(diff));
     const sign = diff >= 0 ? 1 : -1;
 
-    // 레퍼런스 핵심:
-    // 시작은 거의 곧게 뻗고, 필요할 때만 중후반부터 부드럽게 휜다.
-    // 90° 이상에서는 곡률을 과장하지만 화면 안에서 끊김 없이 유지.
-    const curveEase = Math.pow(turn, 0.72);
+    // 각도별 곡률을 명확하게 구분:
+    // 0~15°: 거의 직선
+    // 15~45°: 완만
+    // 45~90°: 강한 회전
+    // 90~180°: 매우 강한 hook/U-turn 느낌
+    let curve;
+    if(absDeg <= 15){
+      curve = (absDeg/15) * 0.08;
+    }else if(absDeg <= 45){
+      const t = (absDeg-15)/30;
+      curve = 0.08 + 0.22*Math.pow(t,1.15);
+    }else if(absDeg <= 90){
+      const t = (absDeg-45)/45;
+      curve = 0.30 + 0.34*Math.pow(t,1.08);
+    }else{
+      const t = (absDeg-90)/90;
+      curve = 0.64 + 0.36*Math.pow(t,0.82);
+    }
 
+    // 첫 제어점은 거의 중앙 전방으로 유지해 "발밑에서 직진" 느낌.
     const c1 = {
-      x: start.x + sign*W*(0.015 + 0.035*curveEase),
-      y: lerp(start.y, end.y, 0.40)
+      x: start.x + sign*W*(0.008 + 0.035*curve),
+      y: H*0.76
     };
 
+    // 두 번째 제어점에서 실제 회전 강도를 크게 만든다.
+    // 90° 이상에서는 반대쪽까지 밀어 hook 형태를 만든다.
+    let c2Offset = W*(0.06 + 0.48*curve);
+    if(absDeg > 90){
+      c2Offset += W*0.12*((absDeg-90)/90);
+    }
+
     const c2 = {
-      x: end.x - sign*W*(0.05 + 0.23*curveEase),
-      y: lerp(start.y, end.y, 0.72)
+      x: end.x - sign*c2Offset,
+      y: H*(0.59 - 0.07*curve)
     };
 
     function point(t){
@@ -410,7 +440,7 @@
     }
 
     const pts = [];
-    const steps = 56;
+    const steps = 72;
     for(let i=0;i<=steps;i++) pts.push(point(i/steps));
 
     const lengths = [0];
@@ -439,12 +469,11 @@
 
       const t = lengths[i]/total;
 
-      // 바닥 원근 핵심:
-      // 화면 가까운 쪽은 매우 넓고, 먼 쪽은 급격히 좁아진다.
-      // 실제 HUD 이미지와 비슷하게 리본 자체가 "눕혀진" 인상을 만든다.
-      const perspective = 1-Math.pow(1-t,2.65);
-      const nearWidth = Math.min(W*0.34, 170);
-      const farWidth = 24;
+      // 원근을 강하게 적용:
+      // 가까운 쪽은 매우 넓고, 40~50% 지점 이후 급격히 좁아진다.
+      const perspective = 1-Math.pow(1-t,3.25);
+      const nearWidth = Math.min(W*0.46, 210);
+      const farWidth = 18;
       const width = lerp(nearWidth, farWidth, perspective);
       const half = width/2;
 
@@ -461,15 +490,14 @@
 
     const ribbonD = polygonPath(left,right);
 
-    // 중앙 하이라이트
     let coreD = `M ${pts[0].x} ${pts[0].y}`;
     for(let i=1;i<pts.length;i++){
       coreD += ` L ${pts[i].x} ${pts[i].y}`;
     }
 
-    // 끝 화살촉을 리본과 한 몸처럼 생성.
+    // 화살촉을 리본의 마지막 진행 방향과 완전히 연결.
     const pEnd = pts[pts.length-1];
-    const pPrev = pts[pts.length-4];
+    const pPrev = pts[pts.length-6];
     const vx = pEnd.x-pPrev.x;
     const vy = pEnd.y-pPrev.y;
     const vlen = Math.hypot(vx,vy)||1;
@@ -478,19 +506,32 @@
     const nx = -uy;
     const ny = ux;
 
-    const arrowLen = clamp(H*0.075, 42, 72);
-    const arrowHalf = 28;
-    const baseBack = {
-      x:pEnd.x-ux*arrowLen*0.72,
-      y:pEnd.y-uy*arrowLen*0.72
-    };
-    const arrowD =
-      `M ${pEnd.x+ux*arrowLen*0.38} ${pEnd.y+uy*arrowLen*0.38}` +
-      ` L ${baseBack.x+nx*arrowHalf} ${baseBack.y+ny*arrowHalf}` +
-      ` L ${pEnd.x-ux*arrowLen*0.08} ${pEnd.y-uy*arrowLen*0.08}` +
-      ` L ${baseBack.x-nx*arrowHalf} ${baseBack.y-ny*arrowHalf} Z`;
+    const arrowLen = clamp(H*0.075, 48, 78);
+    const arrowHalf = 30;
 
-    return { ribbonD, coreD, arrowD, end };
+    const neck = {
+      x:pEnd.x-ux*arrowLen*0.48,
+      y:pEnd.y-uy*arrowLen*0.48
+    };
+
+    const tip = {
+      x:pEnd.x+ux*arrowLen*0.38,
+      y:pEnd.y+uy*arrowLen*0.38
+    };
+
+    const arrowD =
+      `M ${tip.x} ${tip.y}` +
+      ` L ${neck.x+nx*arrowHalf} ${neck.y+ny*arrowHalf}` +
+      ` L ${pEnd.x-ux*arrowLen*0.05} ${pEnd.y-uy*arrowLen*0.05}` +
+      ` L ${neck.x-nx*arrowHalf} ${neck.y-ny*arrowHalf} Z`;
+
+    // 마커를 화살촉 끝에 직접 배치하여 하나의 객체로 보이게 한다.
+    const marker = {
+      x: tip.x,
+      y: tip.y
+    };
+
+    return { ribbonD, coreD, arrowD, marker, end, curve };
   }
 
   function renderRoute(){
@@ -513,19 +554,23 @@
     routeCore.setAttribute('d',route.coreD);
     routeArrow.setAttribute('d',route.arrowD);
 
+    routeEndHalo.setAttribute('cx', route.marker.x);
+    routeEndHalo.setAttribute('cy', route.marker.y);
+    routeEndDot.setAttribute('cx', route.marker.x);
+    routeEndDot.setAttribute('cy', route.marker.y);
+
     const W = window.innerWidth;
     const halfFov = H_FOV/2;
     const onScreen = Math.abs(visualDiff) <= halfFov;
 
     if(onScreen){
-      const x = W*0.5 + (visualDiff/halfFov)*(W*0.38);
-      targetMarker.style.display = 'flex';
-      targetMarker.style.left = `${x}px`;
-      targetMarker.style.top = `${window.innerHeight*0.40}px`;
       edgeHint.style.display = 'none';
+      routeEndHalo.style.display = '';
+      routeEndDot.style.display = '';
     }else{
-      targetMarker.style.display = 'none';
       edgeHint.style.display = 'flex';
+      routeEndHalo.style.display = '';
+      routeEndDot.style.display = '';
       if(visualDiff < 0){
         edgeHint.className = 'left';
         edgeHint.textContent = `← 목표 ${formatDistance(targetDistance)}`;
