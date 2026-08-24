@@ -15,15 +15,33 @@
     position:absolute;top:max(14px,env(safe-area-inset-top));left:14px;right:14px;
     display:flex;justify-content:space-between;gap:8px;z-index:5;pointer-events:none
   }
+  #versionLabel{
+    position:absolute;top:max(14px,env(safe-area-inset-top));left:50%;
+    transform:translateX(-50%);z-index:7;pointer-events:none;
+    padding:8px 10px;border-radius:999px;
+    background:rgba(0,0,0,.48);backdrop-filter:blur(10px);
+    color:#fff;font-size:12px;line-height:1;
+    border:1px solid rgba(255,255,255,.14)
+  }
   .pill{background:rgba(0,0,0,.48);backdrop-filter:blur(10px);padding:8px 10px;border-radius:999px;font-size:12px;line-height:1;color:#fff;border:1px solid rgba(255,255,255,.14)}
+
+  #guideLine{
+    position:absolute;inset:0;width:100%;height:100%;z-index:3;
+    pointer-events:none;overflow:visible
+  }
+  #guideRibbon{
+    fill:#168BFF;
+    fill-opacity:.6;
+  }
+
   #arrowWrap{
     position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
     z-index:4;display:flex;flex-direction:column;align-items:center;gap:6px;
-    transition:left .12s linear, top .12s linear, opacity .12s linear
+    transition:left .12s linear,top .12s linear,opacity .12s linear
   }
   #arrow{
     width:0;height:0;border-left:22px solid transparent;border-right:22px solid transparent;
-    border-bottom:46px solid white;filter:drop-shadow(0 3px 8px rgba(0,0,0,.65));
+    border-bottom:46px solid white;filter:drop-shadow(0 3px 8px rgba(0,0,0,.65))
   }
   #label{
     padding:7px 10px;border-radius:999px;background:rgba(0,0,0,.54);
@@ -58,6 +76,12 @@
   <video id="camera" autoplay playsinline muted></video>
   <div id="shade"></div>
 
+  <svg id="guideLine" aria-hidden="true">
+    <polygon id="guideRibbon" points=""></polygon>
+  </svg>
+
+  <div id="versionLabel">v1.2</div>
+
   <div id="status">
     <div class="pill" id="gpsStatus">GPS 대기</div>
     <div class="pill" id="headingStatus">방향 대기</div>
@@ -79,12 +103,13 @@
 
 <script>
 (() => {
-  const TARGET = { lat: 37.5657076, lon: 126.9781659 };
+  const TARGET = { lat: 37.566826, lon: 126.9786567 };
 
   const video = document.getElementById('camera');
   const startBtn = document.getElementById('startBtn');
   const debugBtn = document.getElementById('debugBtn');
   const arrowWrap = document.getElementById('arrowWrap');
+  const guideRibbon = document.getElementById('guideRibbon');
   const label = document.getElementById('label');
   const edge = document.getElementById('edge');
   const gpsStatus = document.getElementById('gpsStatus');
@@ -97,8 +122,6 @@
   let targetDistance = null;
   let lastHeading = null;
 
-  // 일반적인 스마트폰 후면카메라 가로 FOV 근사값.
-  // 정확한 카메라 내부 파라미터를 웹에서 얻기 어렵기 때문에 60도를 기본값으로 사용.
   const H_FOV = 60;
 
   function toRad(d){ return d * Math.PI / 180; }
@@ -127,7 +150,6 @@
       return newH;
     }
     const diff = norm180(newH - lastHeading);
-    // 센서 떨림 완화
     lastHeading = norm360(lastHeading + diff * 0.18);
     return lastHeading;
   }
@@ -145,6 +167,37 @@
     render();
   }
 
+  function setGuideRibbonEnd(x, y){
+    const startX = window.innerWidth / 2;
+    const startY = window.innerHeight;
+
+    // AR 경로가 바닥에 깔린 것처럼 보이도록
+    // 시작부는 150px, 목표 지점은 30px 폭으로 점차 좁아지는 원근 리본.
+    const startWidth = 150;
+    const endWidth = 30;
+
+    const dx = x - startX;
+    const dy = y - startY;
+    const len = Math.hypot(dx, dy) || 1;
+
+    // 진행 방향에 수직인 단위 벡터
+    const nx = -dy / len;
+    const ny = dx / len;
+
+    const sHalf = startWidth / 2;
+    const eHalf = endWidth / 2;
+
+    const p1 = [startX + nx * sHalf, startY + ny * sHalf];
+    const p2 = [startX - nx * sHalf, startY - ny * sHalf];
+    const p3 = [x - nx * eHalf, y - ny * eHalf];
+    const p4 = [x + nx * eHalf, y + ny * eHalf];
+
+    guideRibbon.setAttribute(
+      'points',
+      `${p1[0]},${p1[1]} ${p2[0]},${p2[1]} ${p3[0]},${p3[1]} ${p4[0]},${p4[1]}`
+    );
+  }
+
   function render(){
     if(targetDistance != null){
       const d = targetDistance < 1000
@@ -153,7 +206,10 @@
       label.textContent = `목표 ${d}`;
     }
 
-    if(currentHeading == null || targetBearing == null) return;
+    if(currentHeading == null || targetBearing == null){
+      setGuideRibbonEnd(window.innerWidth / 2, window.innerHeight / 2);
+      return;
+    }
 
     const diff = norm180(targetBearing - currentHeading);
     const half = H_FOV / 2;
@@ -167,21 +223,25 @@
       const usable = window.innerWidth * 0.76;
       let x = window.innerWidth/2 + (diff / half) * (usable/2);
 
-      // 중앙 ±4°는 스냅해서 떨림을 줄임
       if(Math.abs(diff) < 4) x = window.innerWidth/2;
 
+      const arrowY = window.innerHeight / 2;
       arrowWrap.style.left = `${x}px`;
       arrowWrap.style.opacity = '1';
+      setGuideRibbonEnd(x, arrowY);
     } else {
       arrowWrap.style.display = 'none';
       edge.style.display = 'flex';
 
+      const edgeY = window.innerHeight / 2;
       if(diff < 0){
         edge.className = 'left';
         edge.textContent = `← 목표 ${targetDistance ? Math.round(targetDistance).toLocaleString() + ' m' : ''}`;
+        setGuideRibbonEnd(18, edgeY);
       } else {
         edge.className = 'right';
         edge.textContent = `목표 ${targetDistance ? Math.round(targetDistance).toLocaleString() + ' m' : ''} →`;
+        setGuideRibbonEnd(window.innerWidth - 18, edgeY);
       }
     }
 
@@ -228,11 +288,9 @@
   function handleOrientation(e){
     let h = null;
 
-    // iOS Safari에서 제공되는 자북 기준 보정값
     if(typeof e.webkitCompassHeading === 'number'){
       h = e.webkitCompassHeading;
     } else if(typeof e.alpha === 'number'){
-      // Android Chrome 계열: absolute 이벤트가 제공될 때 alpha를 북쪽 기준 헤딩으로 변환
       h = 360 - e.alpha;
     }
 
@@ -242,7 +300,6 @@
   }
 
   async function startOrientation(){
-    // iOS 권한 요청
     if(typeof DeviceOrientationEvent !== 'undefined' &&
        typeof DeviceOrientationEvent.requestPermission === 'function'){
       const result = await DeviceOrientationEvent.requestPermission();
@@ -272,11 +329,14 @@
     }
   });
 
+  window.addEventListener('resize', render);
+
   debugBtn.addEventListener('click', () => {
     debug.style.display = debug.style.display === 'none' ? 'block' : 'none';
   });
+
+  render();
 })();
 </script>
 </body>
 </html>
-
