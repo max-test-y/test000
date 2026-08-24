@@ -94,7 +94,7 @@
     <path id="guideHighlight" d=""></path>
   </svg>
 
-  <div id="versionLabel">v1.5</div>
+  <div id="versionLabel">v1.6</div>
 
   <div id="status">
     <div class="pill" id="gpsStatus">GPS 대기</div>
@@ -138,6 +138,8 @@
   let targetBearing = null;
   let targetDistance = null;
   let lastHeading = null;
+  let smoothRouteX = null;
+  let smoothRouteDiff = 0;
 
   const H_FOV = 60;
 
@@ -166,8 +168,21 @@
       lastHeading = newH;
       return newH;
     }
-    const diff = norm180(newH - lastHeading);
-    lastHeading = norm360(lastHeading + diff * 0.18);
+
+    let diff = norm180(newH - lastHeading);
+
+    // 1.2° 이하는 센서 노이즈로 보고 무시.
+    if(Math.abs(diff) < 1.2){
+      return lastHeading;
+    }
+
+    // 큰 회전에는 따라가되, 작은 흔들림에는 둔감하게.
+    const alpha =
+      Math.abs(diff) > 20 ? 0.20 :
+      Math.abs(diff) > 8  ? 0.13 :
+                           0.075;
+
+    lastHeading = norm360(lastHeading + diff * alpha);
     return lastHeading;
   }
 
@@ -188,90 +203,114 @@
     const W = window.innerWidth;
     const H = window.innerHeight;
 
-    // 화면 하단 "아래"에서부터 경로가 솟아오르게 해
-    // 실제 바닥 평면에 놓여 카메라 원근으로 보이는 느낌을 만든다.
+    // 유도선 자체의 화면 좌표를 한 번 더 안정화.
+    // 마커가 조금 흔들려도 경로는 더 느리고 부드럽게 따라간다.
+    if(smoothRouteX == null) smoothRouteX = x;
+
+    const xDelta = x - smoothRouteX;
+    if(Math.abs(xDelta) > 1.5){
+      const xAlpha = Math.abs(xDelta) > 70 ? 0.18 : Math.abs(xDelta) > 25 ? 0.11 : 0.065;
+      smoothRouteX += xDelta * xAlpha;
+    }
+
+    const diffDelta = angleDiff - smoothRouteDiff;
+    if(Math.abs(diffDelta) > 0.8){
+      const dAlpha = Math.abs(diffDelta) > 15 ? 0.16 : 0.07;
+      smoothRouteDiff += diffDelta * dAlpha;
+    }
+
+    const targetX = smoothRouteX;
+    const targetY = y + 42;
+
+    // 화면 하단 바깥에서 시작해 바닥에 깔린 느낌 유지.
     const startX = W / 2;
-    const startY = H + 105;
+    const startY = H + 110;
 
-    // 목표 화살표 밑쪽으로 연결.
-    const endX = x;
-    const endY = y + 46;
-
-    // 가까운 쪽은 넓고, 먼 쪽은 매우 좁게.
     const startWidth = Math.min(220, W * 0.48);
     const endWidth = 18;
 
-    const signed = Math.max(-1, Math.min(1, angleDiff / 48));
-    const severity = Math.min(1, Math.abs(angleDiff) / 32);
-    const spanY = Math.max(220, startY - endY);
+    // "목표 마커와 같은 X축에서 꺾이는" 방식:
+    // 먼저 목표 X까지 바닥을 따라 부드럽게 접근하고,
+    // 그 X축에 도달한 뒤 수직에 가까운 마지막 구간으로 연결.
+    const bendY = targetY + Math.max(90, (startY - targetY) * 0.33);
 
-    // 곡률은 각도에 선형으로 반응하지 않고 easing을 사용.
-    // 작은 오차에서는 거의 직진, 큰 오차에서 점진적으로 휘어진다.
-    const easedCurve = Math.sign(signed) * Math.pow(Math.abs(signed), 1.45);
+    // 꺾임이 딱딱하지 않도록 코너 반경 개념의 중간 구간을 둔다.
+    const bendSoft = Math.min(70, Math.max(34, Math.abs(targetX - startX) * 0.22));
 
-    // 시작부는 진행 방향을 거의 화면 중앙으로 유지해
-    // 발밑에 놓인 경로처럼 보이게 한다.
-    const c1x = startX + easedCurve * W * 0.018;
-    const c1y = startY - spanY * 0.37;
+    const dir = targetX >= startX ? 1 : -1;
 
-    // 중후반부에서만 목표 쪽으로 유도.
-    // 과도한 활 모양 대신 자연스러운 도로 곡선을 만든다.
-    const c2x = endX - easedCurve * W * 0.12;
-    const c2y = endY + spanY * 0.38;
+    // 3개의 중심선 구간:
+    // A. 시작 -> 목표 X 근처
+    // B. 둥근 코너
+    // C. 목표 X축을 따라 위로
+    const p0 = {x:startX, y:startY};
+    const p1 = {x:targetX - dir * bendSoft, y:bendY + 24};
+    const p2 = {x:targetX, y:bendY};
+    const p3 = {x:targetX, y:targetY};
 
-    function bezierPoint(t){
-      const mt = 1 - t;
+    function cubicPoint(a,b,c,d,t){
+      const mt = 1-t;
       return {
-        x:
-          mt*mt*mt*startX +
-          3*mt*mt*t*c1x +
-          3*mt*t*t*c2x +
-          t*t*t*endX,
-        y:
-          mt*mt*mt*startY +
-          3*mt*mt*t*c1y +
-          3*mt*t*t*c2y +
-          t*t*t*endY
+        x: mt*mt*mt*a.x + 3*mt*mt*t*b.x + 3*mt*t*t*c.x + t*t*t*d.x,
+        y: mt*mt*mt*a.y + 3*mt*mt*t*b.y + 3*mt*t*t*c.y + t*t*t*d.y
       };
     }
 
-    function bezierTangent(t){
-      const mt = 1 - t;
-      const dx =
-        3*mt*mt*(c1x-startX) +
-        6*mt*t*(c2x-c1x) +
-        3*t*t*(endX-c2x);
-      const dy =
-        3*mt*mt*(c1y-startY) +
-        6*mt*t*(c2y-c1y) +
-        3*t*t*(endY-c2y);
-      const len = Math.hypot(dx,dy) || 1;
-      return {x:dx/len, y:dy/len};
+    // 첫 구간은 완만하게 목표 X 쪽으로 접근.
+    const a1 = p0;
+    const b1 = {x:startX + (p1.x-startX)*0.18, y:startY - (startY-p1.y)*0.42};
+    const c1 = {x:p1.x - (p1.x-startX)*0.18, y:p1.y + 34};
+    const d1 = p1;
+
+    // 두 번째 구간에서만 자연스럽게 "꺾임".
+    const a2 = p1;
+    const b2 = {x:p1.x + dir*bendSoft*0.56, y:p1.y - 10};
+    const c2 = {x:p2.x - dir*bendSoft*0.10, y:p2.y + 22};
+    const d2 = p2;
+
+    // 마지막은 목표 마커와 동일 X축을 따라 올라간다.
+    const a3 = p2;
+    const b3 = {x:targetX, y:p2.y - (p2.y-p3.y)*0.35};
+    const c3 = {x:targetX, y:p3.y + (p2.y-p3.y)*0.25};
+    const d3 = p3;
+
+    const center = [];
+    const seg1 = 24, seg2 = 12, seg3 = 16;
+
+    for(let i=0;i<=seg1;i++) center.push(cubicPoint(a1,b1,c1,d1,i/seg1));
+    for(let i=1;i<=seg2;i++) center.push(cubicPoint(a2,b2,c2,d2,i/seg2));
+    for(let i=1;i<=seg3;i++) center.push(cubicPoint(a3,b3,c3,d3,i/seg3));
+
+    // 누적 거리로 폭 taper를 계산해 원근감을 더 자연스럽게 유지.
+    const lengths = [0];
+    let total = 0;
+    for(let i=1;i<center.length;i++){
+      total += Math.hypot(center[i].x-center[i-1].x, center[i].y-center[i-1].y);
+      lengths.push(total);
     }
+    total = total || 1;
 
     const left = [];
     const right = [];
-    const center = [];
-    const steps = 44;
 
-    for(let i=0;i<=steps;i++){
-      const t = i / steps;
-      const p = bezierPoint(t);
-      const tan = bezierTangent(t);
+    for(let i=0;i<center.length;i++){
+      const p = center[i];
+      const prev = center[Math.max(0,i-1)];
+      const next = center[Math.min(center.length-1,i+1)];
 
-      // 진행 방향에 수직.
-      const nx = -tan.y;
-      const ny = tan.x;
+      const dx = next.x - prev.x;
+      const dy = next.y - prev.y;
+      const len = Math.hypot(dx,dy) || 1;
+      const nx = -dy/len;
+      const ny = dx/len;
 
-      // 바닥 원근: 가까운 25%에서 폭이 크게 줄고
-      // 이후에는 먼 거리에서 천천히 수렴한다.
-      const perspective = 1 - Math.pow(1 - t, 2.25);
-      const width = startWidth + (endWidth - startWidth) * perspective;
-      const half = width / 2;
+      const t = lengths[i]/total;
+      const perspective = 1 - Math.pow(1-t, 2.35);
+      const width = startWidth + (endWidth-startWidth)*perspective;
+      const half = width/2;
 
       left.push([p.x + nx*half, p.y + ny*half]);
       right.push([p.x - nx*half, p.y - ny*half]);
-      center.push([p.x, p.y]);
     }
 
     let d = `M ${left[0][0]} ${left[0][1]}`;
@@ -280,24 +319,21 @@
     d += ' Z';
     guideRibbon.setAttribute('d', d);
 
-    // 아주 얇은 중앙 반사선으로 HUD/도로 느낌을 추가.
-    let centerD = `M ${center[0][0]} ${center[0][1]}`;
-    for(let i=1;i<center.length;i++) centerD += ` L ${center[i][0]} ${center[i][1]}`;
+    let centerD = `M ${center[0].x} ${center[0].y}`;
+    for(let i=1;i<center.length;i++) centerD += ` L ${center[i].x} ${center[i].y}`;
     guideHighlight.setAttribute('d', centerD);
 
-    // 직진에 가까울수록 진한 파랑, 커브가 커질수록 주황.
-    // HSL 보간: blue(215deg) -> orange(30deg)
-    const hue = 215 + (30 - 215) * Math.pow(severity, 0.82);
+    // 색상은 안정화된 각도 차이를 사용해 떨림 방지.
+    const severity = Math.min(1, Math.abs(smoothRouteDiff)/32);
+    const hue = 215 + (30-215)*Math.pow(severity,0.82);
     const sat = 96;
-    const lightNear = 48 + 4 * severity;
-    const lightFar = 55 + 2 * severity;
+    const lightNear = 48 + 4*severity;
+    const lightFar = 55 + 2*severity;
 
     routeStopNear.setAttribute('stop-color', `hsl(${hue} ${sat}% ${lightNear}%)`);
     routeStopFar.setAttribute('stop-color', `hsl(${hue} ${sat}% ${lightFar}%)`);
-
-    // 직진일수록 더 선명하고, 심한 곡선은 색은 주황으로 바뀌되 약간 투명하게.
-    routeStopNear.setAttribute('stop-opacity', String(0.68 - 0.10 * severity));
-    routeStopFar.setAttribute('stop-opacity', String(0.48 - 0.08 * severity));
+    routeStopNear.setAttribute('stop-opacity', String(0.68 - 0.10*severity));
+    routeStopFar.setAttribute('stop-opacity', String(0.48 - 0.08*severity));
   }
 
   function render(){
