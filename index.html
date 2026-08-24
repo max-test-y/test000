@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-<title>AR Navigation v4.8</title>
+<title>AR Navigation v4.9</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
@@ -75,7 +75,7 @@
   }
 
   .flowArrow {
-    fill: rgba(255,255,255,.72);
+    fill: rgba(255,255,255,.86);
     stroke: rgba(255,255,255,.18);
     stroke-width: 1;
     filter: drop-shadow(0 1px 1px rgba(0,0,0,.22));
@@ -232,7 +232,7 @@
 
   <div id="topStatus">
     <div class="pill" id="gpsStatus">GPS 대기</div>
-    <div class="pill" id="versionLabel">v4.8</div>
+    <div class="pill" id="versionLabel">v4.9</div>
     <div class="pill" id="headingStatus">방향 대기</div>
   </div>
 
@@ -360,6 +360,7 @@
   let started = false;
   let flowPhase = 0;
   let lastFrameTime = null;
+  let currentFlowSamples = [];
 
   function toRad(d){ return d * Math.PI / 180; }
   function toDeg(r){ return r * 180 / Math.PI; }
@@ -768,7 +769,7 @@
     }
 
     const ROUTE_WIDTH_M = 1.25;
-    const leftScreen=[], rightScreen=[], centerScreen=[];
+    const leftScreen=[], rightScreen=[], centerScreen=[], widthScreen=[];
     let visibleStarted=false;
 
     for(let i=0;i<centerWorld.length;i++){
@@ -791,12 +792,13 @@
         visibleStarted=true;
         centerScreen.push(c);
         leftScreen.push(l); rightScreen.push(r);
+        widthScreen.push(Math.hypot(r.x-l.x, r.y-l.y));
       }else if(visibleStarted){
         break;
       }
     }
 
-    if(leftScreen.length<2) return {ribbonD:'',rimD:'',flowD:'',visibleCount:0};
+    if(leftScreen.length<2) return {ribbonD:'',rimD:'',flowD:'',flowSamples:[],visibleCount:0};
 
     let flowD=`M ${centerScreen[0].x} ${centerScreen[0].y}`;
     for(let i=1;i<centerScreen.length;i++) flowD+=` L ${centerScreen[i].x} ${centerScreen[i].y}`;
@@ -809,14 +811,20 @@
     let rimD=`M ${leftScreen[0].x} ${leftScreen[0].y}`;
     for(let i=1;i<leftScreen.length;i++) rimD+=` L ${leftScreen[i].x} ${leftScreen[i].y}`;
 
-    return {ribbonD,rimD,flowD,visibleCount:leftScreen.length};
+    const flowSamples = centerScreen.map((p,i)=>({
+      x:p.x,
+      y:p.y,
+      width:widthScreen[i] || 1
+    }));
+
+    return {ribbonD,rimD,flowD,flowSamples,visibleCount:leftScreen.length};
   }
 
   function ensureFlowArrows(count){
     while(routeFlowArrows.children.length < count){
       const p = document.createElementNS('http://www.w3.org/2000/svg','path');
       // 진행 방향이 위쪽(+local Y 음수)인 chevron
-      p.setAttribute('d','M -8 5 L 0 -5 L 8 5 L 5 8 L 0 2 L -5 8 Z');
+      p.setAttribute('d','M -14 9 L 0 -9 L 14 9 L 9 14 L 0 3 L -9 14 Z');
       p.setAttribute('class','flowArrow');
       routeFlowArrows.appendChild(p);
     }
@@ -825,43 +833,63 @@
     }
   }
 
-  function updateFlowArrows(dt){
-    let total = 0;
-    try{
-      total = routeFlowPath.getTotalLength();
-    }catch(_){
-      total = 0;
-    }
+  function interpolateFlowSample(t){
+    const pts = currentFlowSamples;
+    if(!pts || pts.length < 2) return null;
 
-    if(!total || total < 20){
+    t = clamp(t, 0, 1);
+    const f = t * (pts.length - 1);
+    const i = Math.floor(f);
+    const j = Math.min(pts.length - 1, i + 1);
+    const u = f - i;
+
+    const a = pts[i], b = pts[j];
+
+    return {
+      x: a.x + (b.x-a.x)*u,
+      y: a.y + (b.y-a.y)*u,
+      width: a.width + (b.width-a.width)*u
+    };
+  }
+
+  function updateFlowArrows(dt){
+    const pts = currentFlowSamples;
+
+    if(!pts || pts.length < 4){
       ensureFlowArrows(0);
       return;
     }
 
-    // 화면상 약 70px 간격. 경로가 길면 자연스럽게 화살표 수 증가.
-    const spacing = 70;
-    const count = Math.max(2, Math.min(9, Math.floor(total / spacing)));
+    // 화살표 간격은 화면 길이가 아니라 경로 진행률 기준으로 유지.
+    // 정면 경로에서도 서로 겹치지 않고 항상 표시된다.
+    const count = 6;
     ensureFlowArrows(count);
 
-    // px/s 기준 흐름. 사용자의 실제 이동속도와 무관한 HUD 애니메이션.
-    const flowSpeed = 42;
-    flowPhase = (flowPhase + flowSpeed * dt) % spacing;
+    // 1초에 경로 전체의 약 18% 이동
+    flowPhase = (flowPhase + dt * 0.18) % 1;
 
     for(let i=0;i<count;i++){
-      let d = (i * spacing + flowPhase) % total;
+      // 시작점과 끝점은 피해서 경로 내부에 균등 분포
+      let t = (0.08 + i * 0.145 + flowPhase) % 0.87;
+      t += 0.06;
 
-      // 시작/끝에 너무 붙지 않게 약간 안쪽에서 표시
-      d = Math.max(14, Math.min(total - 14, d));
+      const p = interpolateFlowSample(t);
+      const p2 = interpolateFlowSample(Math.min(0.995, t + 0.012));
 
-      const p = routeFlowPath.getPointAtLength(d);
-      const p2 = routeFlowPath.getPointAtLength(Math.min(total, d + 3));
+      if(!p || !p2) continue;
 
-      const angle = Math.atan2(p2.y - p.y, p2.x - p.x) * 180 / Math.PI + 90;
+      const angle =
+        Math.atan2(p2.y - p.y, p2.x - p.x) * 180 / Math.PI + 90;
 
-      // 멀리 갈수록 작은 화살표가 되어 지면 원근과 맞아 보이게 한다.
-      const t = d / total;
-      const scale = 1.15 - 0.55 * t;
-      const opacity = 0.78 - 0.18 * t;
+      // 핵심: 해당 지점의 실제 유도선 화면 폭에 비례해 화살표 크기 결정.
+      // 가까운 곳은 크게, 멀어져 ribbon 폭이 줄면 화살표도 함께 작아진다.
+      const desiredArrowWidth = clamp(p.width * 0.62, 18, 72);
+
+      // 기본 chevron 폭이 약 28이므로 이에 맞춰 scale 계산.
+      const scale = desiredArrowWidth / 28;
+
+      // 먼 쪽도 완전히 사라지지 않도록 opacity만 완만하게 감소.
+      const opacity = 0.82 - 0.18 * t;
 
       const arrow = routeFlowArrows.children[i];
       arrow.setAttribute(
@@ -921,6 +949,7 @@
     routeShadow.setAttribute('d',route.ribbonD);
     routeFlowPath.setAttribute('d',route.flowD || '');
     routeRim.setAttribute('d',route.rimD);
+    currentFlowSamples = route.flowSamples || [];
 
     const dt = lastFrameTime == null ? 0 : Math.min(0.05, (now - lastFrameTime) / 1000);
     lastFrameTime = now;
