@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-<title>AR Navigation v4.4</title>
+<title>AR Navigation v4.5</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
@@ -216,7 +216,7 @@
 
   <div id="topStatus">
     <div class="pill" id="gpsStatus">GPS 대기</div>
-    <div class="pill" id="versionLabel">v4.4</div>
+    <div class="pill" id="versionLabel">v4.5</div>
     <div class="pill" id="headingStatus">방향 대기</div>
   </div>
 
@@ -245,10 +245,30 @@
 <script>
 (() => {
   const TARGETS = [
-    { lat: 37.5651952, lon: 126.9788018, name: '목표 1' },
-    { lat: 37.5651309, lon: 126.9792199, name: '목표 2' },
-    { lat: 37.5653297, lon: 126.9794412, name: '목표 3' },
-    { lat: 37.5654545, lon: 126.9796159, name: '목표 4' }
+    {
+      lat: 37.5653340,
+      lon: 126.9788745,
+      name: '목표 1',
+      guide: '시청삼거리까지 81m 이동(을지로)'
+    },
+    {
+      lat: 37.5658711,
+      lon: 126.9793000,
+      name: '목표 2',
+      guide: '시청삼거리에서 블랙라벨까지 31m 이동'
+    },
+    {
+      lat: 37.5658747,
+      lon: 126.9796576,
+      name: '목표 3',
+      guide: '블랙라벨 앞에서 오른쪽길로 51m 이동'
+    },
+    {
+      lat: 37.5654531,
+      lon: 126.9796623,
+      name: '목표 4',
+      guide: '[B] 도착'
+    }
   ];
 
   const ARRIVAL_RADIUS_M = 5;
@@ -428,7 +448,7 @@
   }
 
   function updateTargetUi(){
-    goalLabel.textContent = `${getActiveTarget().name} / ${TARGETS.length}`;
+    goalLabel.textContent = `${getActiveTarget().name} / ${TARGETS.length} · ${getActiveTarget().guide}`;
     prevTargetBtn.disabled = targetIndex <= 0;
     nextTargetBtn.disabled = targetIndex >= TARGETS.length - 1;
   }
