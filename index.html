@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-<title>AR Navigation v4.9</title>
+<title>AR Navigation v5.0</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
@@ -75,10 +75,12 @@
   }
 
   .flowArrow {
-    fill: rgba(255,255,255,.86);
-    stroke: rgba(255,255,255,.18);
-    stroke-width: 1;
-    filter: drop-shadow(0 1px 1px rgba(0,0,0,.22));
+    fill: none;
+    stroke: rgba(255,255,255,.92);
+    stroke-width: 5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    filter: drop-shadow(0 1px 2px rgba(0,0,0,.28));
     pointer-events: none;
   }
 
@@ -232,7 +234,7 @@
 
   <div id="topStatus">
     <div class="pill" id="gpsStatus">GPS 대기</div>
-    <div class="pill" id="versionLabel">v4.9</div>
+    <div class="pill" id="versionLabel">v5.0</div>
     <div class="pill" id="headingStatus">방향 대기</div>
   </div>
 
@@ -358,7 +360,11 @@
 
   let rafId = null;
   let started = false;
-  let flowPhase = 0;
+  const CHEVRON_SPACING = 62;      // 화면상 누적 경로 거리(px)
+  const CHEVRON_SPEED = 54;        // 목표 방향으로 흐르는 속도(px/s)
+  const CHEVRON_WIDTH_RATIO = 0.72;
+
+  let chevronPhase = 0;
   let lastFrameTime = null;
   let currentFlowSamples = [];
 
@@ -823,8 +829,9 @@
   function ensureFlowArrows(count){
     while(routeFlowArrows.children.length < count){
       const p = document.createElementNS('http://www.w3.org/2000/svg','path');
-      // 진행 방향이 위쪽(+local Y 음수)인 chevron
-      p.setAttribute('d','M -14 9 L 0 -9 L 14 9 L 9 14 L 0 3 L -9 14 Z');
+      // 기본 형태: 진행 방향을 향하는 열린 chevron(">")
+      // 로컬 기준 진행 방향은 위쪽(-Y).
+      p.setAttribute('d','M -12 8 L 0 -8 L 12 8');
       p.setAttribute('class','flowArrow');
       routeFlowArrows.appendChild(p);
     }
@@ -833,70 +840,119 @@
     }
   }
 
-  function interpolateFlowSample(t){
-    const pts = currentFlowSamples;
-    if(!pts || pts.length < 2) return null;
+  function buildChevronMetrics(samples){
+    if(!samples || samples.length < 2) return null;
 
-    t = clamp(t, 0, 1);
-    const f = t * (pts.length - 1);
-    const i = Math.floor(f);
-    const j = Math.min(pts.length - 1, i + 1);
-    const u = f - i;
+    const cumulative = [0];
+    let total = 0;
 
-    const a = pts[i], b = pts[j];
+    for(let i=1;i<samples.length;i++){
+      total += Math.hypot(
+        samples[i].x - samples[i-1].x,
+        samples[i].y - samples[i-1].y
+      );
+      cumulative.push(total);
+    }
+
+    return {samples, cumulative, total};
+  }
+
+  function sampleChevronAtDistance(metrics, distance){
+    const {samples, cumulative, total} = metrics;
+    if(total <= 0) return null;
+
+    distance = clamp(distance, 0, total);
+
+    let lo = 0;
+    let hi = cumulative.length - 1;
+
+    while(lo < hi){
+      const mid = (lo + hi) >> 1;
+      if(cumulative[mid] < distance) lo = mid + 1;
+      else hi = mid;
+    }
+
+    const j = clamp(lo, 1, samples.length - 1);
+    const i = j - 1;
+
+    const d0 = cumulative[i];
+    const d1 = cumulative[j];
+    const seg = Math.max(0.0001, d1 - d0);
+    const u = clamp((distance - d0) / seg, 0, 1);
+
+    const a = samples[i];
+    const b = samples[j];
 
     return {
       x: a.x + (b.x-a.x)*u,
       y: a.y + (b.y-a.y)*u,
-      width: a.width + (b.width-a.width)*u
+      width: a.width + (b.width-a.width)*u,
+      progress: distance / total,
+      angle: Math.atan2(b.y-a.y, b.x-a.x) * 180 / Math.PI + 90
     };
   }
 
-  function updateFlowArrows(dt){
-    const pts = currentFlowSamples;
+  function buildChevrons(dt){
+    const metrics = buildChevronMetrics(currentFlowSamples);
 
-    if(!pts || pts.length < 4){
+    if(!metrics || metrics.total < 30){
       ensureFlowArrows(0);
       return;
     }
 
-    // 화살표 간격은 화면 길이가 아니라 경로 진행률 기준으로 유지.
-    // 정면 경로에서도 서로 겹치지 않고 항상 표시된다.
-    const count = 6;
-    ensureFlowArrows(count);
+    // 누적 거리를 따라 phase가 계속 증가하면서 목표 방향으로 흐른다.
+    chevronPhase =
+      (chevronPhase + CHEVRON_SPEED * dt) % CHEVRON_SPACING;
 
-    // 1초에 경로 전체의 약 18% 이동
-    flowPhase = (flowPhase + dt * 0.18) % 1;
+    const positions = [];
 
-    for(let i=0;i<count;i++){
-      // 시작점과 끝점은 피해서 경로 내부에 균등 분포
-      let t = (0.08 + i * 0.145 + flowPhase) % 0.87;
-      t += 0.06;
+    // 시작점에서 phase만큼 앞선 지점부터 일정 간격으로 배치.
+    // centerline은 사용자 쪽 -> 목표 쪽 순서이므로 phase 증가 = 목표 방향 이동.
+    for(
+      let d = chevronPhase + 16;
+      d < metrics.total - 12;
+      d += CHEVRON_SPACING
+    ){
+      positions.push(d);
+    }
 
-      const p = interpolateFlowSample(t);
-      const p2 = interpolateFlowSample(Math.min(0.995, t + 0.012));
+    ensureFlowArrows(Math.min(12, positions.length));
 
-      if(!p || !p2) continue;
+    for(let i=0;i<routeFlowArrows.children.length;i++){
+      const d = positions[i];
+      const p = sampleChevronAtDistance(metrics, d);
+      if(!p) continue;
 
-      const angle =
-        Math.atan2(p2.y - p.y, p2.x - p.x) * 180 / Math.PI + 90;
+      // t는 "카메라에 얼마나 가까운가": 가까움=1, 멂=0.
+      const t = clamp(1 - p.progress, 0, 1);
 
-      // 핵심: 해당 지점의 실제 유도선 화면 폭에 비례해 화살표 크기 결정.
-      // 가까운 곳은 크게, 멀어져 ribbon 폭이 줄면 화살표도 함께 작아진다.
-      const desiredArrowWidth = clamp(p.width * 0.62, 18, 72);
+      // 요청한 리본 원근식.
+      const perspective = 1 - Math.pow(1 - t, 3.1);
 
-      // 기본 chevron 폭이 약 28이므로 이에 맞춰 scale 계산.
-      const scale = desiredArrowWidth / 28;
+      // 실제 투영된 리본 폭에 비례시키고,
+      // 같은 원근식을 추가 적용해 멀리 있는 chevron을 더 자연스럽게 축소.
+      const desiredWidth = clamp(
+        p.width * CHEVRON_WIDTH_RATIO * (0.55 + 0.45 * perspective),
+        12,
+        86
+      );
 
-      // 먼 쪽도 완전히 사라지지 않도록 opacity만 완만하게 감소.
-      const opacity = 0.82 - 0.18 * t;
+      // 기본 chevron 폭 약 24px
+      const scale = desiredWidth / 24;
+
+      // 가까울수록 진하고, 멀수록 흐리게.
+      const opacity = 0.28 + 0.68 * perspective;
 
       const arrow = routeFlowArrows.children[i];
       arrow.setAttribute(
         'transform',
-        `translate(${p.x} ${p.y}) rotate(${angle}) scale(${scale})`
+        `translate(${p.x} ${p.y}) rotate(${p.angle}) scale(${scale})`
       );
-      arrow.setAttribute('opacity', opacity.toFixed(2));
+      arrow.setAttribute('opacity', opacity.toFixed(3));
+
+      // stroke도 함께 줄여 원근감이 더 자연스럽게 보이게 함.
+      const strokeWidth = clamp(3.2 + 2.4 * perspective, 3.2, 5.6);
+      arrow.setAttribute('stroke-width', strokeWidth.toFixed(2));
     }
   }
 
@@ -953,7 +1009,7 @@
 
     const dt = lastFrameTime == null ? 0 : Math.min(0.05, (now - lastFrameTime) / 1000);
     lastFrameTime = now;
-    updateFlowArrows(dt);
+    buildChevrons(dt);
 
     const halfFov = H_FOV/2;
     const onScreen = Math.abs(visualDiff) <= halfFov;
