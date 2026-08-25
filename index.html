@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-<title>AR Navigation v5.9</title>
+<title>AR Navigation v6.1</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
@@ -62,6 +62,10 @@
   #routeRibbon {
     fill: url(#routeFill);
     filter: drop-shadow(0 2px 3px rgba(0,0,0,.22));
+  }
+  #routeBottomSkirt {
+    fill: url(#routeFill);
+    pointer-events: none;
   }
   #routeRim {
     fill: none;
@@ -271,6 +275,7 @@
       </linearGradient>
     </defs>
     <path id="routeShadow"></path>
+    <path id="routeBottomSkirt"></path>
     <path id="routeRibbon"></path>
     <path id="routeRim"></path>
     <g id="routeChevrons"></g>
@@ -281,7 +286,7 @@
 
   <div id="topStatus">
     <div class="pill" id="gpsStatus">GPS 대기</div>
-    <div class="pill" id="versionLabel">v5.9</div>
+    <div class="pill" id="versionLabel">v6.1</div>
     <div class="pill" id="headingStatus">방향 대기</div>
   </div>
 
@@ -312,28 +317,34 @@
 (() => {
   const TARGETS = [
     {
-      lat: 37.5657124,
+      lat: 37.5657088,
       lon: 126.9790601,
       name: '목표 1',
-      guide: '시청삼거리까지 28m 이동(을지로)'
+      guide: '72m 이동(을지로)'
     },
     {
-      lat: 37.5658711,
-      lon: 126.9793000,
+      lat: 37.5651033,
+      lon: 126.9787614,
       name: '목표 2',
-      guide: '시청삼거리에서 블랙라벨까지 31m 이동'
+      guide: '횡단보도 이용'
     },
     {
-      lat: 37.5658747,
-      lon: 126.9796576,
+      lat: 37.5652114,
+      lon: 126.9784761,
       name: '목표 3',
-      guide: '블랙라벨 앞에서 오른쪽길로 51m 이동'
+      guide: '85m 이동(소공로)'
     },
     {
-      lat: 37.5654531,
-      lon: 126.9796623,
+      lat: 37.5651067,
+      lon: 126.9775616,
       name: '목표 4',
-      guide: '[B] 도착'
+      guide: '횡단보도 이용'
+    },
+    {
+      lat: 37.5648400,
+      lon: 126.9775074,
+      name: '목표 5',
+      guide: '[서울 중구 태평로2가 113-1] 도착'
     }
   ];
 
@@ -385,8 +396,10 @@
   const CHEVRON_POOL_SIZE = 26;   // 동시에 그릴 수 있는 최대 화살표 개수
 
   const camera = document.getElementById('camera');
+  const routeSvg = document.getElementById('routeSvg');
   const routeRibbon = document.getElementById('routeRibbon');
   const routeShadow = document.getElementById('routeShadow');
+  const routeBottomSkirt = document.getElementById('routeBottomSkirt');
   const routeRim = document.getElementById('routeRim');
   const routeChevrons = document.getElementById('routeChevrons');
   const routeEndPulse = document.getElementById('routeEndPulse');
@@ -1027,8 +1040,11 @@
   // 하나의 연속된 곡선이라 경계에서 일그러지지 않는다. 곡선이 카메라
   // 뒤로 넘어가는 지점(급격한 U턴 등)은 자동으로 잘려서 표시된다.
   function buildRoute(diffDeg, routeLengthM){
-    const W = window.innerWidth;
-    const H = window.innerHeight;
+    // 모바일 브라우저의 주소창/하단바 변화로 window.innerHeight와
+    // 실제 SVG 표시 영역이 순간적으로 달라질 수 있으므로 SVG 실측 크기를 쓴다.
+    const svgRect = routeSvg.getBoundingClientRect();
+    const W = Math.max(1, svgRect.width);
+    const H = Math.max(1, svgRect.height);
     const f = (W/2) / Math.tan(toRad(H_FOV/2));
     // 방향센서(beta)가 들어와 있으면 실시간 기울기를, 아니면 기본값을 쓴다.
     const pitchRad = toRad(filteredPitchDeg != null ? filteredPitchDeg : CAM_PITCH_DEG_DEFAULT);
@@ -1089,22 +1105,32 @@
     }
 
     if(left.length < 2){
-      return { ribbonD:'', rimD:'', centerline, end:null, W, H, f, pitchRad, pathLength };
+      return { ribbonD:'', rimD:'', skirtD:'', centerline, end:null, W, H, f, pitchRad, pathLength };
     }
 
     // 화면 하단 시작점 고정:
     // 기울기나 투영 변화로 첫 유효 지점이 화면 위쪽에서 시작하더라도
     // 리본 시작부가 항상 화면 하단과 맞닿도록 하단 앵커를 추가한다.
-    // 모바일 브라우저의 주소창/하단바가 나타나고 사라질 때
-    // visual viewport 높이가 순간적으로 바뀌어도 빈틈이 보이지 않도록
-    // 시작 캡을 화면보다 충분히 아래/좌우로 확장한다.
-    const bottomY = H + Math.max(260, H * 0.34);
-    const bottomLeftX = -W * 0.18;
-    const bottomRightX = W * 1.18;
+    // 실제 첫 유효 단면을 기준으로 화면 아래쪽까지 충분히 연장한다.
+    // 이 경로 자체와 별도로 routeBottomSkirt도 사용해 브라우저 UI 변화 시
+    // 1프레임 정도의 좌표 불일치가 생겨도 하단에 카메라 영상이 비치지 않게 한다.
+    const firstLeft = {...left[0]};
+    const firstRight = {...right[0]};
+    const bottomY = H + Math.max(360, H * 0.50);
+    const bottomExpand = Math.max(W * 0.22, 120);
+
+    const bottomLeftX = Math.min(firstLeft.x - bottomExpand, -W * 0.12);
+    const bottomRightX = Math.max(firstRight.x + bottomExpand, W * 1.12);
 
     left.unshift({ x: bottomLeftX, y: bottomY });
     right.unshift({ x: bottomRightX, y: bottomY });
     rim.unshift({ x: bottomLeftX, y: bottomY });
+
+    const skirtTopY = clamp(
+      Math.max(firstLeft.y, firstRight.y) - 8,
+      H - Math.max(170, H * 0.18),
+      H
+    );
 
     let ribbonD = `M ${left[0].x} ${left[0].y}`;
     for(let i=1;i<left.length;i++) ribbonD += ` L ${left[i].x} ${left[i].y}`;
@@ -1122,7 +1148,15 @@
       y: (left[li].y+right[li].y)/2
     };
 
-    return { ribbonD, rimD, centerline, end, W, H, f, pitchRad, pathLength };
+    // 하단 전용 오버스캔 영역. 리본보다 뒤에서 같은 그라데이션으로 채운다.
+    // 화면 아래쪽의 짧은 영역만 덮기 때문에 유도선 형태에는 영향을 주지 않는다.
+    const skirtD =
+      `M ${bottomLeftX} ${skirtTopY}` +
+      ` L ${bottomRightX} ${skirtTopY}` +
+      ` L ${bottomRightX} ${bottomY}` +
+      ` L ${bottomLeftX} ${bottomY} Z`;
+
+    return { ribbonD, rimD, skirtD, centerline, end, W, H, f, pitchRad, pathLength };
   }
 
   // 지면 위 실제 미터 단위로 화살표를 배치하고 project()로 투영한다.
@@ -1228,6 +1262,7 @@
     const route = buildRoute(visualDiff, routeLengthM);
     routeRibbon.setAttribute('d',route.ribbonD);
     routeShadow.setAttribute('d',route.ribbonD);
+    routeBottomSkirt.setAttribute('d',route.skirtD || '');
     routeRim.setAttribute('d',route.rimD);
 
     // 첨부파일과 동일한 지면 미터 기반 chevron 애니메이션
@@ -1413,12 +1448,20 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
   });
 
   window.addEventListener('resize',()=>{
+    lastRouteLengthTs = null;
     if(!rafId) renderRoute(performance.now());
   });
+
+  if(window.visualViewport){
+    window.visualViewport.addEventListener('resize',()=>{
+      lastRouteLengthTs = null;
+    });
+  }
 
   // 권한 전에도 레이아웃 형태는 보이도록 초기 렌더.
   routeRibbon.setAttribute('d','');
   routeShadow.setAttribute('d','');
+  routeBottomSkirt.setAttribute('d','');
   routeRim.setAttribute('d','');
   routeEndPulse.style.display = 'none';
   routeEndHalo.style.display = 'none';
