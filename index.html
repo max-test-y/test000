@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-<title>AR Navigation v5.6</title>
+<title>AR Navigation v5.7</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
@@ -279,7 +279,7 @@
 
   <div id="topStatus">
     <div class="pill" id="gpsStatus">GPS 대기</div>
-    <div class="pill" id="versionLabel">v5.6</div>
+    <div class="pill" id="versionLabel">v5.7</div>
     <div class="pill" id="headingStatus">방향 대기</div>
   </div>
 
@@ -1011,6 +1011,20 @@
       return { ribbonD:'', rimD:'', centerline, end:null, W, H, f, pitchRad };
     }
 
+    // 화면 하단 시작점 고정:
+    // 기울기나 투영 변화로 첫 유효 지점이 화면 위쪽에서 시작하더라도
+    // 리본 시작부가 항상 화면 하단과 맞닿도록 하단 앵커를 추가한다.
+    const firstWidth = Math.abs(right[0].x - left[0].x);
+    const bottomHalfWidth = clamp(
+      Math.max(firstWidth * 0.52, W * 0.16),
+      W * 0.13,
+      W * 0.36
+    );
+
+    left.unshift({ x: W/2 - bottomHalfWidth, y: H + 2 });
+    right.unshift({ x: W/2 + bottomHalfWidth, y: H + 2 });
+    rim.unshift({ x: W/2 - bottomHalfWidth, y: H + 2 });
+
     let ribbonD = `M ${left[0].x} ${left[0].y}`;
     for(let i=1;i<left.length;i++) ribbonD += ` L ${left[i].x} ${left[i].y}`;
     for(let i=right.length-1;i>=0;i--) ribbonD += ` L ${right[i].x} ${right[i].y}`;
@@ -1152,12 +1166,17 @@
 
     // 첨부파일과 동일한 목표지점 pulse / halo / dot
     if(route.end){
-      routeEndPulse.setAttribute('cx', route.end.x);
-      routeEndPulse.setAttribute('cy', route.end.y);
-      routeEndHalo.setAttribute('cx', route.end.x);
-      routeEndHalo.setAttribute('cy', route.end.y);
-      routeEndDot.setAttribute('cx', route.end.x);
-      routeEndDot.setAttribute('cy', route.end.y);
+      // 목표 마커는 유도선 끝점과 겹치지 않고 위쪽에 떠 있도록 배치한다.
+      const targetMarkerOffsetY = clamp(route.H * 0.065, 44, 72);
+      const markerX = route.end.x;
+      const markerY = route.end.y - targetMarkerOffsetY;
+
+      routeEndPulse.setAttribute('cx', markerX);
+      routeEndPulse.setAttribute('cy', markerY);
+      routeEndHalo.setAttribute('cx', markerX);
+      routeEndHalo.setAttribute('cy', markerY);
+      routeEndDot.setAttribute('cx', markerX);
+      routeEndDot.setAttribute('cy', markerY);
       routeEndPulse.style.display = '';
       routeEndHalo.style.display = '';
       routeEndDot.style.display = '';
