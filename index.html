@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-<title>AR Navigation v5.4</title>
+<title>AR Navigation v5.4.1</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
@@ -251,7 +251,7 @@
 
   <div id="topStatus">
     <div class="pill" id="gpsStatus">GPS 대기</div>
-    <div class="pill" id="versionLabel">v5.4</div>
+    <div class="pill" id="versionLabel">v5.4.1</div>
     <div class="pill" id="headingStatus">방향 대기</div>
   </div>
 
@@ -398,8 +398,13 @@
   // raw sensor state
   let rawHeading = null;
 
-  // filtered state
+  // filtered heading / route state
   let filteredHeading = null;
+  let visualDiff = 0;
+  let desiredDiff = 0;
+  let alignedLock = false;
+  let previousRawDiff = null;
+
   let rawPitch = 0;
   // 기기 기울기(pitch) 필터링 상태.
   let filteredPitchDeg = null;
