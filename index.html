@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-<title>AR Navigation v5.4.1</title>
+<title>AR Navigation v5.5</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
@@ -251,7 +251,7 @@
 
   <div id="topStatus">
     <div class="pill" id="gpsStatus">GPS 대기</div>
-    <div class="pill" id="versionLabel">v5.4.1</div>
+    <div class="pill" id="versionLabel">v5.5</div>
     <div class="pill" id="headingStatus">방향 대기</div>
   </div>
 
@@ -838,80 +838,152 @@
     const W = window.innerWidth;
     const H = window.innerHeight;
     const f = (W/2) / Math.tan(toRad(H_FOV/2));
-    // 방향센서(beta)가 들어와 있으면 실시간 기울기를, 아니면 기본값을 쓴다.
-    const pitchRad = toRad(filteredPitchDeg != null ? filteredPitchDeg : CAM_PITCH_DEG_DEFAULT);
+    const pitchRad = toRad(
+      filteredPitchDeg != null
+        ? filteredPitchDeg
+        : CAM_PITCH_DEG_DEFAULT
+    );
 
     const diff = toRad(clamp(diffDeg, -180, 180));
     const absDeg = Math.min(180, Math.abs(diffDeg));
 
-    // 회전이 클수록(급커브) 더 짧은 구간 안에서 방향을 트는 대신,
-    // 지나치게 급하게 꺾이지 않도록 최소/최대 구간을 둔다.
     const turnLen = clamp(7 + absDeg*0.11, 7, 24);
 
     let x = 0, z = 0;
-    const centerline = [{x, z, theta:0}];
+    const centerline = [{x, z, theta:0, s:0}];
 
     for(let i=1;i<=PATH_STEPS;i++){
       const s = i*(PATH_TOTAL_LEN/PATH_STEPS);
       const t = clamp(s/turnLen, 0, 1);
-      const ease = t*t*(3-2*t); // smoothstep: 방향 전환이 급격하지 않게
+      const ease = t*t*(3-2*t);
       const theta = diff*ease;
       const ds = PATH_TOTAL_LEN/PATH_STEPS;
 
       x += Math.sin(theta)*ds;
       z += Math.cos(theta)*ds;
 
-      centerline.push({x, z, theta});
+      centerline.push({x, z, theta, s});
     }
 
     const halfW = WORLD_WIDTH/2;
-    const left = [], right = [], rim = [];
+    const projected = [];
+    let visibleStarted = false;
 
     for(let i=0;i<centerline.length;i++){
       const c = centerline[i];
-      const nx = Math.cos(c.theta), nz = -Math.sin(c.theta); // 진행방향에 수직인 법선
+      const nx = Math.cos(c.theta);
+      const nz = -Math.sin(c.theta);
 
-      const lx = c.x + nx*halfW, lz = c.z + nz*halfW;
-      const rx = c.x - nx*halfW, rz = c.z - nz*halfW;
+      const lx = c.x + nx*halfW;
+      const lz = c.z + nz*halfW;
+      const rx = c.x - nx*halfW;
+      const rz = c.z - nz*halfW;
 
+      const cp = project(c.x, c.z, W, H, f, pitchRad);
       const lp = project(lx, lz, W, H, f, pitchRad);
       const rp = project(rx, rz, W, H, f, pitchRad);
 
-      // 둘 중 하나라도 카메라 뒤로 넘어가면 그 지점부터는 경로를 끊는다.
-      // 카메라 바로 앞(근접 클립 구간)은 아직 유효한 점이 하나도 없을 때만
-      // 건너뛴다. 유효한 점들이 쌓인 이후에 클립되면(예: 급격한 U턴이
-      // 카메라 뒤로 넘어갈 때) 그 지점에서 경로를 끊는다.
-      if(!lp || !rp){
-        if(left.length === 0) continue;
+      if(!cp || !lp || !rp){
+        if(!visibleStarted) continue;
         break;
       }
 
-      left.push(lp);
-      right.push(rp);
-      rim.push(lp);
+      visibleStarted = true;
+      projected.push({c, cp, lp, rp});
     }
 
-    if(left.length < 2){
-      return { ribbonD:'', rimD:'', centerline, end:null, W, H, f, pitchRad };
+    if(projected.length < 2){
+      return {
+        ribbonD:'',
+        rimD:'',
+        centerline,
+        end:null,
+        targetScreen:null,
+        W,H,f,pitchRad
+      };
+    }
+
+    const left = [];
+    const right = [];
+    const rim = [];
+
+    // 화면 하단은 좌우 100%를 채우고,
+    // 위쪽으로 갈수록 원래 3D 투영 폭으로 자연스럽게 복귀한다.
+    for(let i=0;i<projected.length;i++){
+      const q = projected[i];
+      const t = i / Math.max(1, projected.length-1);
+
+      // 초반 약 35% 구간에서 빠르게 화면 전체 폭 -> 실제 투영 폭으로 수렴.
+      // smoothstep 계열이라 경계가 보이지 않는다.
+      const u = clamp(t / 0.35, 0, 1);
+      const smooth = u*u*(3-2*u);
+      const expand = 1 - smooth;
+
+      const originalLeft = q.lp.x;
+      const originalRight = q.rp.x;
+
+      // 첫 점은 정확히 0 ~ W.
+      const leftX = lerp(0, originalLeft, smooth);
+      const rightX = lerp(W, originalRight, smooth);
+
+      left.push({x:leftX, y:q.lp.y});
+      right.push({x:rightX, y:q.rp.y});
+      rim.push({x:leftX, y:q.lp.y});
     }
 
     let ribbonD = `M ${left[0].x} ${left[0].y}`;
-    for(let i=1;i<left.length;i++) ribbonD += ` L ${left[i].x} ${left[i].y}`;
-    for(let i=right.length-1;i>=0;i--) ribbonD += ` L ${right[i].x} ${right[i].y}`;
+    for(let i=1;i<left.length;i++){
+      ribbonD += ` L ${left[i].x} ${left[i].y}`;
+    }
+    for(let i=right.length-1;i>=0;i--){
+      ribbonD += ` L ${right[i].x} ${right[i].y}`;
+    }
     ribbonD += ' Z';
 
-    let rimD = `M ${rim[0].x} ${rim[0].y}`;
-    for(let i=1;i<rim.length;i++) rimD += ` L ${rim[i].x} ${rim[i].y}`;
+    let rimD = `M ${left[0].x} ${left[0].y}`;
+    for(let i=1;i<left.length;i++){
+      rimD += ` L ${left[i].x} ${left[i].y}`;
+    }
 
-    // 리본이 실제로 그려진 마지막 지점(=화면상 가장 먼 지점)을
-    // 목적지 마커/펄스 위치로 사용한다.
     const li = left.length-1;
     const end = {
-      x: (left[li].x+right[li].x)/2,
-      y: (left[li].y+right[li].y)/2
+      x:(left[li].x+right[li].x)/2,
+      y:(left[li].y+right[li].y)/2
     };
 
-    return { ribbonD, rimD, centerline, end, W, H, f, pitchRad };
+    // 목표 마커는 더 이상 synthetic route의 끝점에 놓지 않는다.
+    // 실제 현재 위치 -> 목표 좌표에서 계산된 거리/방위각을 이용해
+    // 카메라 좌표계의 실제 목표 위치를 직접 투영한다.
+    let targetScreen = null;
+
+    if(Number.isFinite(targetDistance) && Number.isFinite(visualDiff)){
+      const targetRad = toRad(clamp(visualDiff, -179.5, 179.5));
+
+      // 화면에 투영 가능한 최대 거리를 둔다.
+      // 멀리 있는 목표는 시각적으로 거의 지평선에 붙으므로 120m 이상은 동일 취급.
+      const d = clamp(targetDistance, 0.8, 120);
+
+      const tx = Math.sin(targetRad) * d;
+      const tz = Math.cos(targetRad) * d;
+
+      const tp = project(tx, tz, W, H, f, pitchRad);
+
+      if(tp){
+        targetScreen = {
+          x: tp.x,
+          y: tp.y - 20
+        };
+      }
+    }
+
+    return {
+      ribbonD,
+      rimD,
+      centerline,
+      end,
+      targetScreen,
+      W,H,f,pitchRad
+    };
   }
 
   // 지면 위 실제 미터 단위로 화살표를 배치하고 project()로 투영한다.
@@ -1034,14 +1106,15 @@
       );
     }
 
-    // 첨부파일과 동일한 목표지점 pulse / halo / dot
-    if(route.end){
-      routeEndPulse.setAttribute('cx', route.end.x);
-      routeEndPulse.setAttribute('cy', route.end.y);
-      routeEndHalo.setAttribute('cx', route.end.x);
-      routeEndHalo.setAttribute('cy', route.end.y);
-      routeEndDot.setAttribute('cx', route.end.x);
-      routeEndDot.setAttribute('cy', route.end.y);
+    // 실제 목표 좌표를 투영한 위치에 목표 마커 표시.
+    // 유도선과 겹치지 않도록 화면 기준 20px 위로 올린 값이다.
+    if(route.targetScreen){
+      routeEndPulse.setAttribute('cx', route.targetScreen.x);
+      routeEndPulse.setAttribute('cy', route.targetScreen.y);
+      routeEndHalo.setAttribute('cx', route.targetScreen.x);
+      routeEndHalo.setAttribute('cy', route.targetScreen.y);
+      routeEndDot.setAttribute('cx', route.targetScreen.x);
+      routeEndDot.setAttribute('cy', route.targetScreen.y);
       routeEndPulse.style.display = '';
       routeEndHalo.style.display = '';
       routeEndDot.style.display = '';
@@ -1083,7 +1156,8 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
 목표 방위각: ${targetBearing != null ? targetBearing.toFixed(1)+'°' : '-'}
 필터 헤딩: ${filteredHeading != null ? filteredHeading.toFixed(1)+'°' : '-'}
 카메라 피치: ${filteredPitchDeg != null ? filteredPitchDeg.toFixed(1)+'° (센서)' : CAM_PITCH_DEG_DEFAULT+'° (기본값)'}
-방향 차이: ${visualDiff.toFixed(1)}°`;
+방향 차이: ${visualDiff.toFixed(1)}°
+목표 마커: 실제 거리·방위각 직접 투영`;
 
     rafId = requestAnimationFrame(renderRoute);
   }
