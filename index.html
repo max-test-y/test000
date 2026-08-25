@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-<title>AR Navigation v5.5</title>
+<title>AR Navigation v5.6</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
@@ -251,7 +251,7 @@
 
   <div id="topStatus">
     <div class="pill" id="gpsStatus">GPS 대기</div>
-    <div class="pill" id="versionLabel">v5.5</div>
+    <div class="pill" id="versionLabel">v5.6</div>
     <div class="pill" id="headingStatus">방향 대기</div>
   </div>
 
@@ -907,38 +907,42 @@
     const right = [];
     const rim = [];
 
-    // 화면 하단은 좌우 100%를 채우고,
-    // 위쪽으로 갈수록 원래 3D 투영 폭으로 자연스럽게 복귀한다.
+    // 실제 3D 투영 결과는 그대로 사용한다.
     for(let i=0;i<projected.length;i++){
-      const q = projected[i];
-      const t = i / Math.max(1, projected.length-1);
-
-      // 초반 약 35% 구간에서 빠르게 화면 전체 폭 -> 실제 투영 폭으로 수렴.
-      // smoothstep 계열이라 경계가 보이지 않는다.
-      const u = clamp(t / 0.35, 0, 1);
-      const smooth = u*u*(3-2*u);
-      const expand = 1 - smooth;
-
-      const originalLeft = q.lp.x;
-      const originalRight = q.rp.x;
-
-      // 첫 점은 정확히 0 ~ W.
-      const leftX = lerp(0, originalLeft, smooth);
-      const rightX = lerp(W, originalRight, smooth);
-
-      left.push({x:leftX, y:q.lp.y});
-      right.push({x:rightX, y:q.rp.y});
-      rim.push({x:leftX, y:q.lp.y});
+      left.push({x:projected[i].lp.x, y:projected[i].lp.y});
+      right.push({x:projected[i].rp.x, y:projected[i].rp.y});
+      rim.push({x:projected[i].lp.x, y:projected[i].lp.y});
     }
 
-    let ribbonD = `M ${left[0].x} ${left[0].y}`;
+    // 핵심 수정:
+    // 첫 투영점의 y에서 폭을 억지로 화면 전체로 벌리지 않는다.
+    // 대신 실제 화면 하단(y=H)에만 좌우 100% 폭의 시작점을 추가하고
+    // 짧은 전환 구간을 통해 원래 3D 경로에 연결한다.
+    const firstL = left[0];
+    const firstR = right[0];
+
+    const bridgeY = Math.min(
+      H - 1,
+      Math.max(firstL.y, firstR.y) + Math.max(28, (H - Math.max(firstL.y, firstR.y))*0.34)
+    );
+
+    const bridgeLeft = {
+      x: lerp(0, firstL.x, 0.46),
+      y: bridgeY
+    };
+    const bridgeRight = {
+      x: lerp(W, firstR.x, 0.46),
+      y: bridgeY
+    };
+
+    let ribbonD = `M 0 ${H} L ${bridgeLeft.x} ${bridgeLeft.y} L ${left[0].x} ${left[0].y}`;
     for(let i=1;i<left.length;i++){
       ribbonD += ` L ${left[i].x} ${left[i].y}`;
     }
     for(let i=right.length-1;i>=0;i--){
       ribbonD += ` L ${right[i].x} ${right[i].y}`;
     }
-    ribbonD += ' Z';
+    ribbonD += ` L ${bridgeRight.x} ${bridgeRight.y} L ${W} ${H} Z`;
 
     let rimD = `M ${left[0].x} ${left[0].y}`;
     for(let i=1;i<left.length;i++){
