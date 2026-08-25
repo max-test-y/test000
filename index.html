@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-<title>AR Navigation v5.7</title>
+<title>AR Navigation v5.9</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
@@ -11,6 +11,7 @@
     margin: 0;
     width: 100%;
     height: 100%;
+    height: 100dvh;
     overflow: hidden;
     background: #000;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
@@ -19,6 +20,7 @@
     position: relative;
     width: 100%;
     height: 100%;
+    height: 100dvh;
     overflow: hidden;
     background: #000;
   }
@@ -279,7 +281,7 @@
 
   <div id="topStatus">
     <div class="pill" id="gpsStatus">GPS 대기</div>
-    <div class="pill" id="versionLabel">v5.7</div>
+    <div class="pill" id="versionLabel">v5.9</div>
     <div class="pill" id="headingStatus">방향 대기</div>
   </div>
 
@@ -365,9 +367,13 @@
   const NEAR_CLIP = 0.8;         // 카메라 앞 이 거리(m 환산) 안쪽은 그리지 않음(뒤로 넘어간 구간 컷)
 
   // ---- 유도선(지면 경로) 모델 ----
-  const WORLD_WIDTH = 2.24;     // 유도선 폭(m) — 차선 하나 정도
-  const PATH_TOTAL_LEN = 55;   // 유도선을 계산하는 전체 길이(m)
-  const PATH_STEPS = 90;       // 곡선 샘플 수
+  const WORLD_WIDTH = 2.24;       // 유도선 폭(m)
+  const ROUTE_MAX_LEN_M = 50;     // 50m 밖에서는 이 길이를 유지
+  const ROUTE_MIN_LEN_M = 2.5;    // 최종 도착 직전에도 최소한의 시인성 유지
+  const ROUTE_SHRINK_MPS = 3.2;   // 갑작스런 짧아짐 방지: 초당 최대 감소량
+  const ROUTE_GROW_MPS = 5.0;     // 목표 전환/GPS 튐 시 갑작스런 길어짐 방지
+  const ROUTE_LEN_RESPONSE = 3.0; // 목표 거리 추종 강도(낮을수록 더 부드러움)
+  const PATH_STEPS = 90;          // 곡선 샘플 수
 
   // ---- 흐르는 화살표(chevron) 모델 ----
   // 화면 픽셀이 아니라 지면 위 실제 미터 단위로 배치한 뒤 project()로
@@ -441,6 +447,11 @@
 
   let chevronPhase = 0;
   let lastTs = null;
+
+  // 목표까지의 실제 거리를 따라 유도선 길이를 부드럽게 변화시키는 상태.
+  // 목표가 바뀌거나 GPS가 순간적으로 튀어도 이 값은 갑자기 변하지 않는다.
+  let smoothedRouteLengthM = ROUTE_MAX_LEN_M;
+  let lastRouteLengthTs = null;
 
   let rafId = null;
   let started = false;
@@ -731,6 +742,8 @@
     previousRawDiff = null;
     desiredDiff = 0;
     visualDiff = 0;
+    targetBearing = null;
+    lastRouteLengthTs = null;
 
     updateTargetUi();
     updateTargetFromGps();
@@ -741,10 +754,29 @@
 
     const target = getActiveTarget();
 
-    targetBearing = bearing(
+    const nextTargetBearing = bearing(
       currentPos.latitude, currentPos.longitude,
       target.lat, target.lon
     );
+
+    // GPS 위치가 몇 m만 흔들려도 목표 방위각이 계속 바뀔 수 있으므로
+    // 목표 방위각 자체도 저역통과 필터로 부드럽게 만든다.
+    if(targetBearing == null){
+      targetBearing = nextTargetBearing;
+    }else{
+      const bearingDelta = norm180(nextTargetBearing - targetBearing);
+      const absBearingDelta = Math.abs(bearingDelta);
+
+      if(absBearingDelta >= 0.9){
+        const bearingAlpha =
+          absBearingDelta > 25 ? 0.32 :
+          absBearingDelta > 12 ? 0.20 :
+          absBearingDelta > 5  ? 0.11 :
+                                 0.055;
+
+        targetBearing = norm360(targetBearing + bearingDelta * bearingAlpha);
+      }
+    }
 
     targetDistance = haversine(
       currentPos.latitude, currentPos.longitude,
@@ -844,16 +876,16 @@
 
     const delta = norm180(rawHeading-filteredHeading);
 
-    // 정지 상태의 작은 센서 떨림만 제거한다.
-    if(Math.abs(delta) < 0.65) return;
+    // 작은 자력계 떨림은 유도선까지 전달하지 않는다.
+    if(Math.abs(delta) < 1.2) return;
 
-    // 회전 중에는 지연이 생기지 않도록 훨씬 빠르게 따라간다.
+    // 실제 회전은 따라가되 기존보다 한 단계 더 완만하게 반영한다.
     const alpha =
-      Math.abs(delta) > 35 ? 0.48 :
-      Math.abs(delta) > 18 ? 0.38 :
-      Math.abs(delta) > 8  ? 0.28 :
-      Math.abs(delta) > 3  ? 0.18 :
-                             0.10;
+      Math.abs(delta) > 40 ? 0.40 :
+      Math.abs(delta) > 22 ? 0.30 :
+      Math.abs(delta) > 10 ? 0.20 :
+      Math.abs(delta) > 4  ? 0.12 :
+                             0.06;
 
     filteredHeading = norm360(filteredHeading + delta*alpha);
   }
@@ -874,13 +906,13 @@
     }
 
     const delta = rawPitch-filteredPitchDeg;
-    if(Math.abs(delta) < 0.3) return;
+    if(Math.abs(delta) < 0.6) return;
 
     const alpha =
-      Math.abs(delta) > 20 ? 0.35 :
-      Math.abs(delta) > 10 ? 0.24 :
-      Math.abs(delta) > 4  ? 0.15 :
-                             0.09;
+      Math.abs(delta) > 22 ? 0.28 :
+      Math.abs(delta) > 11 ? 0.18 :
+      Math.abs(delta) > 5  ? 0.11 :
+                             0.06;
 
     filteredPitchDeg += delta*alpha;
   }
@@ -933,6 +965,50 @@
     }
   }
 
+  function updateSmoothedRouteLength(ts){
+    const now = Number.isFinite(ts) ? ts : performance.now();
+
+    const desired =
+      Number.isFinite(targetDistance)
+        ? clamp(targetDistance, ROUTE_MIN_LEN_M, ROUTE_MAX_LEN_M)
+        : ROUTE_MAX_LEN_M;
+
+    if(lastRouteLengthTs == null){
+      lastRouteLengthTs = now;
+      smoothedRouteLengthM = desired;
+      return smoothedRouteLengthM;
+    }
+
+    const dt = clamp((now - lastRouteLengthTs) / 1000, 0, 0.08);
+    lastRouteLengthTs = now;
+
+    if(dt <= 0) return smoothedRouteLengthM;
+
+    const delta = desired - smoothedRouteLengthM;
+
+    // 지수형 smoothing으로 목표값을 따라가되,
+    // 한 프레임에서 변할 수 있는 길이를 초당 변화량으로 한 번 더 제한한다.
+    const response = 1 - Math.exp(-ROUTE_LEN_RESPONSE * dt);
+    let step = delta * response;
+
+    const maxStep =
+      (step < 0 ? ROUTE_SHRINK_MPS : ROUTE_GROW_MPS) * dt;
+
+    step = clamp(step, -ROUTE_SHRINK_MPS * dt, ROUTE_GROW_MPS * dt);
+
+    if(Math.abs(delta) < 0.03){
+      smoothedRouteLengthM = desired;
+    }else{
+      smoothedRouteLengthM += step;
+    }
+
+    return clamp(
+      smoothedRouteLengthM,
+      ROUTE_MIN_LEN_M,
+      ROUTE_MAX_LEN_M
+    );
+  }
+
   // 카메라(핀홀) 투영: 지면 위 좌표(x=좌우 m, z=전방 m)를 화면 픽셀로 변환.
   // 카메라 뒤쪽(camZ <= NEAR_CLIP)이면 null을 반환해 그리지 않는다.
   function project(x, z, W, H, f, pitchRad){
@@ -950,12 +1026,17 @@
   // 각도 구간을 나눠 손으로 그리던 방식과 달리, 0~180° 어떤 값에서도
   // 하나의 연속된 곡선이라 경계에서 일그러지지 않는다. 곡선이 카메라
   // 뒤로 넘어가는 지점(급격한 U턴 등)은 자동으로 잘려서 표시된다.
-  function buildRoute(diffDeg){
+  function buildRoute(diffDeg, routeLengthM){
     const W = window.innerWidth;
     const H = window.innerHeight;
     const f = (W/2) / Math.tan(toRad(H_FOV/2));
     // 방향센서(beta)가 들어와 있으면 실시간 기울기를, 아니면 기본값을 쓴다.
     const pitchRad = toRad(filteredPitchDeg != null ? filteredPitchDeg : CAM_PITCH_DEG_DEFAULT);
+    const pathLength = clamp(
+      Number.isFinite(routeLengthM) ? routeLengthM : ROUTE_MAX_LEN_M,
+      ROUTE_MIN_LEN_M,
+      ROUTE_MAX_LEN_M
+    );
 
     const diff = toRad(clamp(diffDeg, -180, 180));
     const absDeg = Math.min(180, Math.abs(diffDeg));
@@ -968,11 +1049,11 @@
     const centerline = [{x, z, theta:0}];
 
     for(let i=1;i<=PATH_STEPS;i++){
-      const s = i*(PATH_TOTAL_LEN/PATH_STEPS);
+      const s = i*(pathLength/PATH_STEPS);
       const t = clamp(s/turnLen, 0, 1);
       const ease = t*t*(3-2*t); // smoothstep: 방향 전환이 급격하지 않게
       const theta = diff*ease;
-      const ds = PATH_TOTAL_LEN/PATH_STEPS;
+      const ds = pathLength/PATH_STEPS;
 
       x += Math.sin(theta)*ds;
       z += Math.cos(theta)*ds;
@@ -1008,22 +1089,22 @@
     }
 
     if(left.length < 2){
-      return { ribbonD:'', rimD:'', centerline, end:null, W, H, f, pitchRad };
+      return { ribbonD:'', rimD:'', centerline, end:null, W, H, f, pitchRad, pathLength };
     }
 
     // 화면 하단 시작점 고정:
     // 기울기나 투영 변화로 첫 유효 지점이 화면 위쪽에서 시작하더라도
     // 리본 시작부가 항상 화면 하단과 맞닿도록 하단 앵커를 추가한다.
-    const firstWidth = Math.abs(right[0].x - left[0].x);
-    const bottomHalfWidth = clamp(
-      Math.max(firstWidth * 0.52, W * 0.16),
-      W * 0.13,
-      W * 0.36
-    );
+    // 모바일 브라우저의 주소창/하단바가 나타나고 사라질 때
+    // visual viewport 높이가 순간적으로 바뀌어도 빈틈이 보이지 않도록
+    // 시작 캡을 화면보다 충분히 아래/좌우로 확장한다.
+    const bottomY = H + Math.max(260, H * 0.34);
+    const bottomLeftX = -W * 0.18;
+    const bottomRightX = W * 1.18;
 
-    left.unshift({ x: W/2 - bottomHalfWidth, y: H + 2 });
-    right.unshift({ x: W/2 + bottomHalfWidth, y: H + 2 });
-    rim.unshift({ x: W/2 - bottomHalfWidth, y: H + 2 });
+    left.unshift({ x: bottomLeftX, y: bottomY });
+    right.unshift({ x: bottomRightX, y: bottomY });
+    rim.unshift({ x: bottomLeftX, y: bottomY });
 
     let ribbonD = `M ${left[0].x} ${left[0].y}`;
     for(let i=1;i<left.length;i++) ribbonD += ` L ${left[i].x} ${left[i].y}`;
@@ -1041,17 +1122,18 @@
       y: (left[li].y+right[li].y)/2
     };
 
-    return { ribbonD, rimD, centerline, end, W, H, f, pitchRad };
+    return { ribbonD, rimD, centerline, end, W, H, f, pitchRad, pathLength };
   }
 
   // 지면 위 실제 미터 단위로 화살표를 배치하고 project()로 투영한다.
   // 리본과 동일한 카메라 모델을 쓰므로 원근감이 자연스럽게 일치한다.
-  function updateChevrons(centerline, W, H, f, pitchRad, phaseM, spacingM){
-    const ds = PATH_TOTAL_LEN/PATH_STEPS;
+  function updateChevrons(centerline, W, H, f, pitchRad, phaseM, spacingM, pathLength){
+    const effectiveLength = clamp(pathLength || ROUTE_MAX_LEN_M, ROUTE_MIN_LEN_M, ROUTE_MAX_LEN_M);
+    const ds = effectiveLength/PATH_STEPS;
     let d = ((phaseM % spacingM)+spacingM)%spacingM;
     let idx = 0;
 
-    while(d < PATH_TOTAL_LEN && idx < chevronPool.length){
+    while(d < effectiveLength && idx < chevronPool.length){
       const fi = clamp(d/ds, 0, centerline.length-1);
       const i0 = Math.floor(fi);
       const i1 = Math.min(centerline.length-1, i0+1);
@@ -1075,7 +1157,7 @@
       const pRight = project(rightX,rightZ,W,H,f,pitchRad);
 
       if(pTip && pLeft && pRight){
-        const distRatio = clamp(d/PATH_TOTAL_LEN, 0, 1);
+        const distRatio = clamp(d/effectiveLength, 0, 1);
         let opacity = 0.88;
         if(distRatio < 0.04) opacity *= distRatio/0.04;
         if(distRatio > 0.82) opacity *= clamp((1-distRatio)/0.18, 0, 1);
@@ -1124,16 +1206,17 @@
     }
 
     const delta = norm180(desiredDiff-visualDiff);
-    const visualAlpha =
-      Math.abs(delta) > 70 ? 0.30 :
-      Math.abs(delta) > 35 ? 0.23 :
-      Math.abs(delta) > 15 ? 0.17 :
-      Math.abs(delta) > 6  ? 0.12 :
-                             0.075;
+    const absVisualDelta = Math.abs(delta);
 
-    if(Math.abs(delta) < 0.45){
-      visualDiff = desiredDiff;
-    }else{
+    // 최종 화면 유도선에 별도의 dead-band를 둬 작은 좌우 출렁임을 억제한다.
+    const visualAlpha =
+      absVisualDelta > 75 ? 0.24 :
+      absVisualDelta > 40 ? 0.17 :
+      absVisualDelta > 18 ? 0.12 :
+      absVisualDelta > 8  ? 0.075 :
+                            0.045;
+
+    if(absVisualDelta >= 1.25){
       visualDiff += delta*visualAlpha;
     }
 
@@ -1141,7 +1224,8 @@
       visualDiff = 0;
     }
 
-    const route = buildRoute(visualDiff);
+    const routeLengthM = updateSmoothedRouteLength(ts);
+    const route = buildRoute(visualDiff, routeLengthM);
     routeRibbon.setAttribute('d',route.ribbonD);
     routeShadow.setAttribute('d',route.ribbonD);
     routeRim.setAttribute('d',route.rimD);
@@ -1160,7 +1244,8 @@
         route.f,
         route.pitchRad,
         chevronPhase,
-        CHEVRON_SPACING_M
+        CHEVRON_SPACING_M,
+        route.pathLength
       );
     }
 
@@ -1210,6 +1295,7 @@
 `목표: ${getActiveTarget().name} (${getActiveTarget().lat}, ${getActiveTarget().lon})
 현재: ${currentPos ? currentPos.latitude.toFixed(7)+', '+currentPos.longitude.toFixed(7) : '-'}
 거리: ${targetDistance != null ? targetDistance.toFixed(1)+' m' : '-'}
+유도선 길이: ${smoothedRouteLengthM.toFixed(1)} m
 GPS 상태: ${currentPos ? getGpsQuality(currentPos.accuracy).label : '수신 대기'}
 GPS raw accuracy: ${lastRawAccuracy != null ? lastRawAccuracy.toFixed(1)+' m' : '-'}
 GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
