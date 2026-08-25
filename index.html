@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-<title>AR Navigation v3.0</title>
+<title>AR Navigation v4.0</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
@@ -67,6 +67,35 @@
     stroke-width: 2;
     stroke-linecap: round;
   }
+  #routeChevrons path {
+    fill: none;
+    stroke: url(#chevronStroke);
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  #routeEndPulse {
+    fill: none;
+    stroke: rgba(220,242,255,.6);
+    stroke-width: 2;
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: endPulse 1.8s ease-out infinite;
+  }
+  #routeEndHalo {
+    fill: rgba(47,141,255,.20);
+    stroke: rgba(220,242,255,.7);
+    stroke-width: 2;
+  }
+  #routeEndDot {
+    fill: #eaf6ff;
+    stroke: #2f8dff;
+    stroke-width: 4;
+  }
+  @keyframes endPulse {
+    0%   { transform: scale(0.8);  opacity: .65; }
+    75%  { transform: scale(1.9);  opacity: 0; }
+    100% { transform: scale(1.9);  opacity: 0; }
+  }
 
   #topStatus {
     position: absolute;
@@ -96,40 +125,25 @@
   #versionLabel { justify-self: center; }
   #headingStatus { justify-self: end; }
 
-  /* 하단 HUD: 속도 + 오렌지 핀 + 거리 (레퍼런스 스타일) */
+  /* 하단 HUD: 거리만 표시 (속도 제거) */
   #bottomHud {
     position: absolute;
     z-index: 9;
     left: 18px;
     bottom: max(96px, calc(env(safe-area-inset-bottom) + 96px));
     display: flex;
-    align-items: flex-end;
-    gap: 14px;
+    align-items: center;
+    gap: 8px;
     pointer-events: none;
     text-shadow: 0 2px 6px rgba(0,0,0,.55);
   }
-  #speedValue {
-    color: #fff;
-    font-size: 44px;
-    font-weight: 800;
-    line-height: .82;
-    letter-spacing: -.5px;
-  }
-  #speedUnit {
-    color: rgba(255,255,255,.85);
-    font-size: 13px;
-    font-weight: 700;
-    margin-top: 2px;
-  }
-  #speedBlock { display: flex; flex-direction: column; align-items: flex-start; }
-  #distBlock { display: flex; flex-direction: column; align-items: center; gap: 4px; }
   #distPin {
     width: 22px;
     height: 26px;
   }
   #distValue {
     color: #ffb04d;
-    font-size: 15px;
+    font-size: 17px;
     font-weight: 800;
   }
 
@@ -204,37 +218,37 @@
 
   <svg id="routeSvg" aria-hidden="true">
     <defs>
-      <!-- 좌(밝은 하늘색) → 우(짙은 네이비) 2톤 셰이딩. 실제 3D가 아니라
-           평평한 색상만으로 입체감을 주는 트릭 (레퍼런스와 동일한 방식) -->
       <linearGradient id="routeFill" x1="0%" y1="0%" x2="100%" y2="0%">
         <stop offset="0%"  stop-color="#8fd8ff" stop-opacity=".95"></stop>
         <stop offset="46%" stop-color="#2f8dff" stop-opacity=".95"></stop>
         <stop offset="100%" stop-color="#0b3f9e" stop-opacity=".95"></stop>
       </linearGradient>
+      <linearGradient id="chevronStroke" x1="0" y1="1" x2="0" y2="0">
+        <stop offset="0%" stop-color="#eaf6ff" stop-opacity=".95"></stop>
+        <stop offset="100%" stop-color="#8ad2ff" stop-opacity=".9"></stop>
+      </linearGradient>
     </defs>
     <path id="routeShadow"></path>
     <path id="routeRibbon"></path>
     <path id="routeRim"></path>
+    <g id="routeChevrons"></g>
+    <circle id="routeEndPulse" r="16"></circle>
+    <circle id="routeEndHalo" r="16"></circle>
+    <circle id="routeEndDot" r="6"></circle>
   </svg>
 
   <div id="topStatus">
     <div class="pill" id="gpsStatus">GPS 대기</div>
-    <div class="pill" id="versionLabel">v3.0</div>
+    <div class="pill" id="versionLabel">v4.0</div>
     <div class="pill" id="headingStatus">방향 대기</div>
   </div>
 
   <div id="bottomHud">
-    <div id="speedBlock">
-      <div id="speedValue">--</div>
-      <div id="speedUnit">km/h</div>
-    </div>
-    <div id="distBlock">
-      <svg id="distPin" viewBox="0 0 24 28">
-        <path d="M12 0C5.4 0 0 5.3 0 11.8 0 20.5 12 28 12 28s12-7.5 12-16.2C24 5.3 18.6 0 12 0z" fill="#ff8a1e"></path>
-        <path d="M12 2.6c-5.1 0-9.2 4.1-9.2 9.2 0 6.8 9.2 13.2 9.2 13.2s9.2-6.4 9.2-13.2c0-5.1-4.1-9.2-9.2-9.2z" fill="#ffab52"></path>
-      </svg>
-      <div id="distValue">-</div>
-    </div>
+    <svg id="distPin" viewBox="0 0 24 28">
+      <path d="M12 0C5.4 0 0 5.3 0 11.8 0 20.5 12 28 12 28s12-7.5 12-16.2C24 5.3 18.6 0 12 0z" fill="#ff8a1e"></path>
+      <path d="M12 2.6c-5.1 0-9.2 4.1-9.2 9.2 0 6.8 9.2 13.2 9.2 13.2s9.2-6.4 9.2-13.2c0-5.1-4.1-9.2-9.2-9.2z" fill="#ffab52"></path>
+    </svg>
+    <div id="distValue">-</div>
   </div>
 
   <div id="edgeHint"></div>
@@ -248,18 +262,47 @@
 
 <script>
 (() => {
-  const TARGET = { lat: 37.5668260, lon: 126.9786567 };
+  const TARGET = { lat: 37.5653577, lon: 126.9794382 };
 
-  // 카메라 실제 FOV를 웹에서 정확히 얻기 어렵기 때문에 일반 후면 광각의
-  // 체감값을 사용한다. 화면 밖 목표도 유도선 곡률에는 계속 반영한다.
-  const H_FOV = 64;
+  // ---- 카메라(투영) 모델 ----
+  // 실제 기기의 자세(pitch) 센서를 쓰지 않고 손으로 든 폰의 평균적인
+  // 자세를 가정한 고정값이다. 필요하면 이 두 값만 조정하면 된다.
+  const H_FOV = 64;            // 카메라 수평 화각(도)
+  const CAM_HEIGHT = 1.3;      // 카메라(폰) 높이(m), 지면 기준
+  const CAM_PITCH_DEG = 8;     // 카메라가 수평보다 아래를 보는 각도(도)
+  const NEAR_CLIP = 0.8;       // 카메라 앞 이 거리(m 환산) 안쪽은 그리지 않음(뒤로 넘어간 구간 컷)
+
+  // ---- 유도선(지면 경로) 모델 ----
+  const WORLD_WIDTH = 3.2;     // 유도선 폭(m) — 차선 하나 정도
+  const PATH_TOTAL_LEN = 55;   // 유도선을 계산하는 전체 길이(m)
+  const PATH_STEPS = 90;       // 곡선 샘플 수
+
+  // ---- 흐르는 화살표(chevron) 모델 ----
+  // 화면 픽셀이 아니라 지면 위 실제 미터 단위로 배치한 뒤 project()로
+  // 투영하기 때문에, 리본과 완전히 같은 원근감(가까울수록 크게)을 갖는다.
+  const CHEVRON_SPACING_M = 2.6;  // 화살표 사이 간격(m)
+  const CHEVRON_SPEED_MPS = 3.2;  // 화살표가 목표를 향해 흐르는 속도(m/s)
+  const CHEVRON_WIDTH_M = 0.62;   // 화살표 폭(m)
+  const CHEVRON_LEN_M = 0.95;     // 화살표 길이(m)
+  const CHEVRON_POOL_SIZE = 26;   // 동시에 그릴 수 있는 최대 화살표 개수
 
   const camera = document.getElementById('camera');
   const routeRibbon = document.getElementById('routeRibbon');
   const routeShadow = document.getElementById('routeShadow');
   const routeRim = document.getElementById('routeRim');
+  const routeChevrons = document.getElementById('routeChevrons');
+  const routeEndPulse = document.getElementById('routeEndPulse');
+  const routeEndHalo = document.getElementById('routeEndHalo');
+  const routeEndDot = document.getElementById('routeEndDot');
 
-  const speedValue = document.getElementById('speedValue');
+  const chevronPool = [];
+  for(let i=0;i<CHEVRON_POOL_SIZE;i++){
+    const el = document.createElementNS('http://www.w3.org/2000/svg','path');
+    el.setAttribute('opacity','0');
+    routeChevrons.appendChild(el);
+    chevronPool.push(el);
+  }
+
   const distValue = document.getElementById('distValue');
   const edgeHint = document.getElementById('edgeHint');
 
@@ -270,19 +313,21 @@
   const debugBtn = document.getElementById('debugBtn');
 
   let currentPos = null;
-  let currentSpeed = null; // m/s, GPS가 제공할 때만
-  let targetBearing = null;
+  // 실제 GPS/방향센서 값이 들어오기 전에도 화면에 경로가 바로 보이도록
+  // null 대신 "정면 0°" 기본값으로 시작한다.
+  let targetBearing = 0;
   let targetDistance = null;
 
-  // raw sensor state
-  let rawHeading = null;
+  let rawHeading = 0;
 
-  // filtered state
-  let filteredHeading = null;
+  let filteredHeading = 0;
   let visualDiff = 0;
   let desiredDiff = 0;
   let alignedLock = false;
   let previousRawDiff = null;
+
+  let chevronPhase = 0;
+  let lastTs = null;
 
   let rafId = null;
   let started = false;
@@ -346,10 +391,8 @@
 
     const delta = norm180(rawHeading-filteredHeading);
 
-    // 정지 상태의 작은 센서 떨림만 제거한다.
     if(Math.abs(delta) < 0.65) return;
 
-    // 회전 중에는 지연이 생기지 않도록 훨씬 빠르게 따라간다.
     const alpha =
       Math.abs(delta) > 35 ? 0.48 :
       Math.abs(delta) > 18 ? 0.38 :
@@ -377,169 +420,150 @@
     if(h != null) ingestHeading(h);
   }
 
-  // 레퍼런스처럼 리본 하나가 화살촉처럼 끝까지 뾰족하게 이어지는 형태.
-  // 별도의 화살표 머리/네크 조각을 붙이지 않고, 폭 보간만으로 표현한다.
-  function buildRoute(diff){
-    const W = window.innerWidth;
-    const H = window.innerHeight;
-
-    const start = { x:W*0.50, y:H+150 };
-    const absDeg = Math.min(180, Math.abs(diff));
-    const sign = diff >= 0 ? 1 : -1;
-
-    const halfFov = H_FOV/2;
-    const visibleRatio = clamp(diff/halfFov,-1.25,1.25);
-    const forwardEnd = {
-      x: W*0.50 + visibleRatio*(W*0.35),
-      y: H*0.50
+  // 카메라(핀홀) 투영: 지면 위 좌표(x=좌우 m, z=전방 m)를 화면 픽셀로 변환.
+  // 카메라 뒤쪽(camZ <= NEAR_CLIP)이면 null을 반환해 그리지 않는다.
+  function project(x, z, W, H, f, pitchRad){
+    const camY = z*Math.sin(pitchRad) - CAM_HEIGHT*Math.cos(pitchRad);
+    const camZ = CAM_HEIGHT*Math.sin(pitchRad) + z*Math.cos(pitchRad);
+    if(camZ <= NEAR_CLIP) return null;
+    return {
+      x: W/2 + f*(x/camZ),
+      y: H/2 - f*(camY/camZ)
     };
-
-    const pts = [];
-
-    function addCubic(p0,p1,p2,p3,steps,skipFirst=false){
-      for(let i=skipFirst ? 1 : 0;i<=steps;i++){
-        const t=i/steps, mt=1-t;
-        pts.push({
-          x: mt*mt*mt*p0.x + 3*mt*mt*t*p1.x + 3*mt*t*t*p2.x + t*t*t*p3.x,
-          y: mt*mt*mt*p0.y + 3*mt*mt*t*p1.y + 3*mt*t*t*p2.y + t*t*t*p3.y
-        });
-      }
-    }
-
-    function addArc(cx,cy,r,a0,a1,steps,skipFirst=true){
-      for(let i=skipFirst ? 1 : 0;i<=steps;i++){
-        const t=i/steps;
-        const a=a0+(a1-a0)*t;
-        pts.push({x:cx+Math.cos(a)*r,y:cy+Math.sin(a)*r});
-      }
-    }
-
-    if(absDeg <= 90){
-      let curve;
-      if(absDeg <= 8){
-        curve=0;
-      }else if(absDeg <= 25){
-        curve=0.04+0.14*Math.pow((absDeg-8)/17,1.35);
-      }else if(absDeg <= 45){
-        curve=0.18+0.20*Math.pow((absDeg-25)/20,1.25);
-      }else{
-        curve=0.38+0.42*Math.pow((absDeg-45)/45,1.05);
-      }
-
-      const c1={
-        x:start.x+sign*W*(0.008+0.035*curve),
-        y:H*0.76
-      };
-      const c2={
-        x:forwardEnd.x-sign*W*(0.05+0.62*curve),
-        y:H*(0.59-0.07*curve)
-      };
-
-      addCubic(start,c1,c2,forwardEnd,72);
-
-    } else {
-      const u = (absDeg-90)/90;
-
-      const approachEnd = {
-        x: start.x,
-        y: H*0.66
-      };
-
-      addCubic(
-        start,
-        {x:start.x,y:H*0.88},
-        {x:start.x,y:H*0.74},
-        approachEnd,
-        26
-      );
-
-      const radius = W*(0.18 + 0.10*u);
-      const cx = approachEnd.x + sign*radius;
-      const cy = approachEnd.y;
-
-      const sweep = Math.PI/2 + (Math.PI/2)*u;
-
-      let a0, a1;
-      if(sign > 0){
-        a0 = Math.PI;
-        a1 = Math.PI - sweep;
-      }else{
-        a0 = 0;
-        a1 = sweep;
-      }
-
-      addArc(cx,cy,radius,a0,a1,34,true);
-
-      const last = pts[pts.length-1];
-      const returnAmount = u;
-      const returnEnd = {
-        x: last.x,
-        y: lerp(last.y, H*0.78, returnAmount)
-      };
-
-      if(returnAmount > 0.05){
-        const prev = pts[pts.length-2];
-        const tx = last.x-prev.x;
-        const ty = last.y-prev.y;
-        const len = Math.hypot(tx,ty)||1;
-        const ux=tx/len, uy=ty/len;
-
-        addCubic(
-          last,
-          {x:last.x+ux*H*0.035,y:last.y+uy*H*0.035},
-          {x:returnEnd.x,y:returnEnd.y-H*0.035},
-          returnEnd,
-          18,
-          true
-        );
-      }
-    }
-
-    // 누적 거리
-    const lengths=[0];
-    let total=0;
-    for(let i=1;i<pts.length;i++){
-      total+=Math.hypot(pts[i].x-pts[i-1].x,pts[i].y-pts[i-1].y);
-      lengths.push(total);
-    }
-    total ||= 1;
-
-    // 레퍼런스 대비: 근거리 폭을 더 두툼하게, 원거리는 뾰족한 점(farWidth≈0)까지
-    // 좁아지도록 해서 "짧고 두꺼운 화살표" ~ "길게 휘어지는 뾰족한 리본" 두 느낌을
-    // 하나의 보간식으로 표현한다.
-    const left=[],right=[];
-    for(let i=0;i<pts.length;i++){
-      const prev=pts[Math.max(0,i-1)];
-      const next=pts[Math.min(pts.length-1,i+1)];
-      const dx=next.x-prev.x, dy=next.y-prev.y;
-      const len=Math.hypot(dx,dy)||1;
-      const nx=-dy/len, ny=dx/len;
-
-      const t=lengths[i]/total;
-      const perspective=1-Math.pow(1-t,3.4);
-      const nearWidth=Math.min(W*0.38,168);
-      const farWidth=3;
-      const width=lerp(nearWidth,farWidth,perspective);
-      const half=width/2;
-
-      left.push({x:pts[i].x+nx*half,y:pts[i].y+ny*half});
-      right.push({x:pts[i].x-nx*half,y:pts[i].y-ny*half});
-    }
-
-    let ribbonD=`M ${left[0].x} ${left[0].y}`;
-    for(let i=1;i<left.length;i++) ribbonD+=` L ${left[i].x} ${left[i].y}`;
-    for(let i=right.length-1;i>=0;i--) ribbonD+=` L ${right[i].x} ${right[i].y}`;
-    ribbonD+=' Z';
-
-    // 밝은(안쪽) 가장자리를 따라가는 얇은 림 라이트 — 레퍼런스의 은은한
-    // 하이라이트 엣지를 흉내낸다.
-    let rimD=`M ${left[0].x} ${left[0].y}`;
-    for(let i=1;i<left.length;i++) rimD+=` L ${left[i].x} ${left[i].y}`;
-
-    return {ribbonD, rimD};
   }
 
-  function renderRoute(){
+  // 목표 방향과 현재 진행 방향의 차이(diff, 도)를 이용해 지면 위의
+  // 경로(세계 좌표)를 만들고, 그 경로를 카메라로 투영해 화면 리본을 그린다.
+  // 각도 구간을 나눠 손으로 그리던 방식과 달리, 0~180° 어떤 값에서도
+  // 하나의 연속된 곡선이라 경계에서 일그러지지 않는다. 곡선이 카메라
+  // 뒤로 넘어가는 지점(급격한 U턴 등)은 자동으로 잘려서 표시된다.
+  function buildRoute(diffDeg){
+    const W = window.innerWidth;
+    const H = window.innerHeight;
+    const f = (W/2) / Math.tan(toRad(H_FOV/2));
+    const pitchRad = toRad(CAM_PITCH_DEG);
+
+    const diff = toRad(clamp(diffDeg, -180, 180));
+    const absDeg = Math.min(180, Math.abs(diffDeg));
+
+    // 회전이 클수록(급커브) 더 짧은 구간 안에서 방향을 트는 대신,
+    // 지나치게 급하게 꺾이지 않도록 최소/최대 구간을 둔다.
+    const turnLen = clamp(7 + absDeg*0.11, 7, 24);
+
+    let x = 0, z = 0;
+    const centerline = [{x, z, theta:0}];
+
+    for(let i=1;i<=PATH_STEPS;i++){
+      const s = i*(PATH_TOTAL_LEN/PATH_STEPS);
+      const t = clamp(s/turnLen, 0, 1);
+      const ease = t*t*(3-2*t); // smoothstep: 방향 전환이 급격하지 않게
+      const theta = diff*ease;
+      const ds = PATH_TOTAL_LEN/PATH_STEPS;
+
+      x += Math.sin(theta)*ds;
+      z += Math.cos(theta)*ds;
+
+      centerline.push({x, z, theta});
+    }
+
+    const halfW = WORLD_WIDTH/2;
+    const left = [], right = [], rim = [];
+
+    for(let i=0;i<centerline.length;i++){
+      const c = centerline[i];
+      const nx = Math.cos(c.theta), nz = -Math.sin(c.theta); // 진행방향에 수직인 법선
+
+      const lx = c.x + nx*halfW, lz = c.z + nz*halfW;
+      const rx = c.x - nx*halfW, rz = c.z - nz*halfW;
+
+      const lp = project(lx, lz, W, H, f, pitchRad);
+      const rp = project(rx, rz, W, H, f, pitchRad);
+
+      // 둘 중 하나라도 카메라 뒤로 넘어가면 그 지점부터는 경로를 끊는다.
+      if(!lp || !rp) break;
+
+      left.push(lp);
+      right.push(rp);
+      rim.push(lp);
+    }
+
+    if(left.length < 2){
+      return { ribbonD:'', rimD:'', centerline, end:null, W, H, f, pitchRad };
+    }
+
+    let ribbonD = `M ${left[0].x} ${left[0].y}`;
+    for(let i=1;i<left.length;i++) ribbonD += ` L ${left[i].x} ${left[i].y}`;
+    for(let i=right.length-1;i>=0;i--) ribbonD += ` L ${right[i].x} ${right[i].y}`;
+    ribbonD += ' Z';
+
+    let rimD = `M ${rim[0].x} ${rim[0].y}`;
+    for(let i=1;i<rim.length;i++) rimD += ` L ${rim[i].x} ${rim[i].y}`;
+
+    // 리본이 실제로 그려진 마지막 지점(=화면상 가장 먼 지점)을
+    // 목적지 마커/펄스 위치로 사용한다.
+    const li = left.length-1;
+    const end = {
+      x: (left[li].x+right[li].x)/2,
+      y: (left[li].y+right[li].y)/2
+    };
+
+    return { ribbonD, rimD, centerline, end, W, H, f, pitchRad };
+  }
+
+  // 지면 위 실제 미터 단위로 화살표를 배치하고 project()로 투영한다.
+  // 리본과 동일한 카메라 모델을 쓰므로 원근감이 자연스럽게 일치한다.
+  function updateChevrons(centerline, W, H, f, pitchRad, phaseM, spacingM){
+    const ds = PATH_TOTAL_LEN/PATH_STEPS;
+    let d = ((phaseM % spacingM)+spacingM)%spacingM;
+    let idx = 0;
+
+    while(d < PATH_TOTAL_LEN && idx < chevronPool.length){
+      const fi = clamp(d/ds, 0, centerline.length-1);
+      const i0 = Math.floor(fi);
+      const i1 = Math.min(centerline.length-1, i0+1);
+      const t = fi-i0;
+      const c0 = centerline[i0], c1 = centerline[i1];
+
+      const cx = lerp(c0.x,c1.x,t);
+      const cz = lerp(c0.z,c1.z,t);
+      const theta = lerp(c0.theta,c1.theta,t);
+
+      const ux = Math.sin(theta), uz = Math.cos(theta);
+      const nx = Math.cos(theta), nz = -Math.sin(theta);
+
+      const backX = cx-ux*CHEVRON_LEN_M, backZ = cz-uz*CHEVRON_LEN_M;
+      const leftX = backX+nx*CHEVRON_WIDTH_M, leftZ = backZ+nz*CHEVRON_WIDTH_M;
+      const rightX = backX-nx*CHEVRON_WIDTH_M, rightZ = backZ-nz*CHEVRON_WIDTH_M;
+      const tipX = cx+ux*CHEVRON_LEN_M*0.35, tipZ = cz+uz*CHEVRON_LEN_M*0.35;
+
+      const pTip = project(tipX,tipZ,W,H,f,pitchRad);
+      const pLeft = project(leftX,leftZ,W,H,f,pitchRad);
+      const pRight = project(rightX,rightZ,W,H,f,pitchRad);
+
+      if(pTip && pLeft && pRight){
+        const distRatio = clamp(d/PATH_TOTAL_LEN, 0, 1);
+        let opacity = 0.88;
+        if(distRatio < 0.04) opacity *= distRatio/0.04;
+        if(distRatio > 0.82) opacity *= clamp((1-distRatio)/0.18, 0, 1);
+
+        const size = Math.hypot(pTip.x-pLeft.x, pTip.y-pLeft.y);
+        const strokeW = clamp(size*0.16, 1.4, 6);
+
+        const el = chevronPool[idx++];
+        el.setAttribute('d',
+          `M ${pLeft.x.toFixed(1)} ${pLeft.y.toFixed(1)} L ${pTip.x.toFixed(1)} ${pTip.y.toFixed(1)} L ${pRight.x.toFixed(1)} ${pRight.y.toFixed(1)}`
+        );
+        el.setAttribute('stroke-width', strokeW.toFixed(1));
+        el.setAttribute('opacity', opacity.toFixed(2));
+      }
+
+      d += spacingM;
+    }
+
+    for(;idx<chevronPool.length;idx++) chevronPool[idx].setAttribute('opacity','0');
+  }
+
+  function renderRoute(ts){
     if(targetBearing != null && rawHeading != null){
       const rawDiff = norm180(targetBearing-rawHeading);
 
@@ -588,6 +612,33 @@
     routeShadow.setAttribute('d',route.ribbonD);
     routeRim.setAttribute('d',route.rimD);
 
+    // 화살표(chevron) 흐름: 경과 시간만큼 phase(m)를 전진시켜
+    // 화살표들이 목표를 향해 계속 흘러가는 것처럼 보이게 한다.
+    if(lastTs == null) lastTs = ts || performance.now();
+    const dt = clamp((ts||performance.now())-lastTs, 0, 48);
+    lastTs = ts || performance.now();
+    chevronPhase += dt*CHEVRON_SPEED_MPS/1000;
+
+    if(route.centerline){
+      updateChevrons(route.centerline, route.W, route.H, route.f, route.pitchRad, chevronPhase, CHEVRON_SPACING_M);
+    }
+
+    if(route.end){
+      routeEndPulse.setAttribute('cx', route.end.x);
+      routeEndPulse.setAttribute('cy', route.end.y);
+      routeEndHalo.setAttribute('cx', route.end.x);
+      routeEndHalo.setAttribute('cy', route.end.y);
+      routeEndDot.setAttribute('cx', route.end.x);
+      routeEndDot.setAttribute('cy', route.end.y);
+      routeEndPulse.style.display = '';
+      routeEndHalo.style.display = '';
+      routeEndDot.style.display = '';
+    }else{
+      routeEndPulse.style.display = 'none';
+      routeEndHalo.style.display = 'none';
+      routeEndDot.style.display = 'none';
+    }
+
     const halfFov = H_FOV/2;
     const onScreen = Math.abs(visualDiff) <= halfFov;
 
@@ -606,10 +657,6 @@
 
     if(filteredHeading != null){
       headingStatus.textContent = `방향 ${Math.round(filteredHeading)}°`;
-    }
-
-    if(currentSpeed != null){
-      speedValue.textContent = `${Math.round(currentSpeed*3.6)}`;
     }
 
     debug.textContent =
@@ -647,9 +694,6 @@
         longitude: pos.coords.longitude,
         accuracy: pos.coords.accuracy
       };
-      currentSpeed = (typeof pos.coords.speed === 'number' && pos.coords.speed >= 0)
-        ? pos.coords.speed
-        : null;
 
       gpsStatus.textContent = `GPS ±${Math.round(pos.coords.accuracy)}m`;
       updateTargetFromGps();
@@ -705,13 +749,17 @@
   });
 
   window.addEventListener('resize',()=>{
-    if(!rafId) renderRoute();
+    if(!rafId) renderRoute(performance.now());
   });
 
-  // 권한 전에도 레이아웃 형태는 보이도록 초기 렌더.
   routeRibbon.setAttribute('d','');
   routeShadow.setAttribute('d','');
   routeRim.setAttribute('d','');
+
+  // 카메라/GPS/방향센서 권한 여부와 관계없이 경로 렌더 루프는 즉시 시작한다.
+  // 권한이 통과하기 전까지는 "정면 0°" 기본값으로 그려지다가, 실제 GPS/
+  // 방향센서 값이 들어오는 즉시 자연스럽게 그 값으로 갱신된다.
+  rafId = requestAnimationFrame(renderRoute);
 })();
 </script>
 </body>
