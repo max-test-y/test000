@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-<title>AR Navigation v4.0</title>
+<title>AR Navigation v5.4</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
@@ -125,25 +125,37 @@
   #versionLabel { justify-self: center; }
   #headingStatus { justify-self: end; }
 
-  /* 하단 HUD: 거리만 표시 (속도 제거) */
+  /* 하단 HUD: 거리 */
   #bottomHud {
     position: absolute;
     z-index: 9;
-    left: 18px;
+    left: 50%;
+    transform: translateX(-50%);
     bottom: max(96px, calc(env(safe-area-inset-bottom) + 96px));
     display: flex;
-    align-items: center;
-    gap: 8px;
+    align-items: flex-end;
     pointer-events: none;
     text-shadow: 0 2px 6px rgba(0,0,0,.55);
   }
+  #distBlock { display: flex; flex-direction: column; align-items: center; gap: 4px; }
   #distPin {
     width: 22px;
     height: 26px;
   }
+  #goalLabel {
+    color: #fff;
+    font-size: 13px;
+    font-weight: 800;
+    padding: 5px 9px;
+    border-radius: 999px;
+    background: rgba(0,0,0,.42);
+    border: 1px solid rgba(255,255,255,.14);
+    backdrop-filter: blur(8px);
+  }
+
   #distValue {
     color: #ffb04d;
-    font-size: 17px;
+    font-size: 15px;
     font-weight: 800;
   }
 
@@ -204,7 +216,7 @@
     color: #111;
   }
   button.secondary {
-    flex: 0 0 82px;
+    flex: 0 1 92px;
     background: rgba(20,20,20,.78);
     color: white;
     border: 1px solid rgba(255,255,255,.17);
@@ -239,31 +251,80 @@
 
   <div id="topStatus">
     <div class="pill" id="gpsStatus">GPS 대기</div>
-    <div class="pill" id="versionLabel">v4.0</div>
+    <div class="pill" id="versionLabel">v5.4</div>
     <div class="pill" id="headingStatus">방향 대기</div>
   </div>
 
   <div id="bottomHud">
-    <svg id="distPin" viewBox="0 0 24 28">
-      <path d="M12 0C5.4 0 0 5.3 0 11.8 0 20.5 12 28 12 28s12-7.5 12-16.2C24 5.3 18.6 0 12 0z" fill="#ff8a1e"></path>
-      <path d="M12 2.6c-5.1 0-9.2 4.1-9.2 9.2 0 6.8 9.2 13.2 9.2 13.2s9.2-6.4 9.2-13.2c0-5.1-4.1-9.2-9.2-9.2z" fill="#ffab52"></path>
-    </svg>
-    <div id="distValue">-</div>
+    <div id="distBlock">
+      <div id="goalLabel">목표 1 / 4</div>
+      <svg id="distPin" viewBox="0 0 24 28">
+        <path d="M12 0C5.4 0 0 5.3 0 11.8 0 20.5 12 28 12 28s12-7.5 12-16.2C24 5.3 18.6 0 12 0z" fill="#ff8a1e"></path>
+        <path d="M12 2.6c-5.1 0-9.2 4.1-9.2 9.2 0 6.8 9.2 13.2 9.2 13.2s9.2-6.4 9.2-13.2c0-5.1-4.1-9.2-9.2-9.2z" fill="#ffab52"></path>
+      </svg>
+      <div id="distValue">-</div>
+    </div>
   </div>
 
   <div id="edgeHint"></div>
   <div id="debug"></div>
 
   <div id="controls">
+    <button id="prevTargetBtn" class="secondary">이전 목표</button>
     <button id="startBtn">카메라 · 위치 · 방향 시작</button>
+    <button id="nextTargetBtn" class="secondary">다음 목표</button>
     <button id="debugBtn" class="secondary">정보</button>
   </div>
 </div>
 
 <script>
 (() => {
-  const TARGET = { lat: 37.5653577, lon: 126.9794382 };
+  const TARGETS = [
+    {
+      lat: 37.5657124,
+      lon: 126.9790601,
+      name: '목표 1',
+      guide: '시청삼거리까지 28m 이동(을지로)'
+    },
+    {
+      lat: 37.5658711,
+      lon: 126.9793000,
+      name: '목표 2',
+      guide: '시청삼거리에서 블랙라벨까지 31m 이동'
+    },
+    {
+      lat: 37.5658747,
+      lon: 126.9796576,
+      name: '목표 3',
+      guide: '블랙라벨 앞에서 오른쪽길로 51m 이동'
+    },
+    {
+      lat: 37.5654531,
+      lon: 126.9796623,
+      name: '목표 4',
+      guide: '[B] 도착'
+    }
+  ];
 
+  const ARRIVAL_RADIUS_M = 5;
+
+  // GPS 보정 설정
+  const GPS_MAX_ACCURACY_M = 18;       // 이보다 나쁜 샘플은 기본적으로 무시
+  const GPS_HISTORY_SIZE = 6;          // 최근 위치 샘플 수
+  const GPS_JUMP_LIMIT_M = 18;         // 비정상 순간 점프 기준
+  const GPS_STILL_RADIUS_M = 1.4;      // 정지로 간주할 이동량
+  const ARRIVAL_CONFIRM_COUNT = 3;     // 5m 이내 연속 확인 횟수
+  const ARRIVAL_RELEASE_M = 8;         // 도착 latch 해제 거리
+
+  // 웹 데모용 추가 위치 보정
+  const MAX_WALK_SPEED_MPS = 4.5;      // 약 16km/h 이상 점프는 보행으로 보기 어려움
+  const ROUTE_SNAP_MAX_M = 14;         // 경로선에서 너무 멀면 스냅하지 않음
+  const ROUTE_SNAP_FULL_M = 5;         // 이 거리 안에서는 강하게 경로선에 붙임
+  const STALE_SAMPLE_MS = 5000;        // 너무 오래된 위치 샘플 무시
+
+
+  // 카메라 실제 FOV를 웹에서 정확히 얻기 어렵기 때문에 일반 후면 광각의
+  // 체감값을 사용한다. 화면 밖 목표도 유도선 곡률에는 계속 반영한다.
   // ---- 카메라(투영) 모델 ----
   // pitch(카메라가 수평보다 아래를 보는 각도)는 기본적으로 아래 고정값을
   // 쓰지만, 방향센서(beta)가 들어오기 시작하면 실시간 값으로 대체된다.
@@ -306,30 +367,41 @@
   }
 
   const distValue = document.getElementById('distValue');
+  const goalLabel = document.getElementById('goalLabel');
   const edgeHint = document.getElementById('edgeHint');
 
   const gpsStatus = document.getElementById('gpsStatus');
   const headingStatus = document.getElementById('headingStatus');
   const debug = document.getElementById('debug');
   const startBtn = document.getElementById('startBtn');
+  const prevTargetBtn = document.getElementById('prevTargetBtn');
+  const nextTargetBtn = document.getElementById('nextTargetBtn');
   const debugBtn = document.getElementById('debugBtn');
 
   let currentPos = null;
-  // 실제 GPS/방향센서 값이 들어오기 전에도 화면에 경로가 바로 보이도록
-  // null 대신 "정면 0°" 기본값으로 시작한다.
-  let targetBearing = 0;
+  let targetBearing = null;
   let targetDistance = null;
 
-  let rawHeading = 0;
+  let targetIndex = 0;
+  let arrivalLatched = false;
+  let arrivalConfirmCount = 0;
 
-  let filteredHeading = 0;
-  let visualDiff = 0;
-  let desiredDiff = 0;
-  let alignedLock = false;
-  let previousRawDiff = null;
+  // GPS smoothing state
+  const gpsHistory = [];
+  let filteredPos = null;
+  let lastAcceptedRawPos = null;
+  let lastAcceptedTimestamp = null;
+  let lastRawAccuracy = null;
+  let lastSnapDistance = null;
+  let lastSnapStrength = 0;
 
-  // 기기 기울기(pitch, y축) 필터링 상태. 센서 값이 아직 없으면 null이며,
-  // 이 경우 buildRoute가 CAM_PITCH_DEG_DEFAULT로 대체한다.
+  // raw sensor state
+  let rawHeading = null;
+
+  // filtered state
+  let filteredHeading = null;
+  let rawPitch = 0;
+  // 기기 기울기(pitch) 필터링 상태.
   let filteredPitchDeg = null;
 
   let chevronPhase = 0;
@@ -369,20 +441,289 @@
     return `${(m/1000).toFixed(1)}km`;
   }
 
+  function latLonToLocalMeters(lat, lon, refLat, refLon){
+    const R = 6371000;
+    const x = toRad(lon - refLon) * R * Math.cos(toRad((lat + refLat) / 2));
+    const y = toRad(lat - refLat) * R;
+    return {x, y};
+  }
+
+  function localMetersToLatLon(x, y, refLat, refLon){
+    const R = 6371000;
+    const lat = refLat + toDeg(y / R);
+    const lon = refLon + toDeg(x / (R * Math.cos(toRad((lat + refLat) / 2))));
+    return {latitude: lat, longitude: lon};
+  }
+
+  function nearestPointOnSegmentMeters(pos, a, b){
+    const refLat = pos.latitude;
+    const refLon = pos.longitude;
+
+    const p = {x:0, y:0};
+    const aa = latLonToLocalMeters(a.lat, a.lon, refLat, refLon);
+    const bb = latLonToLocalMeters(b.lat, b.lon, refLat, refLon);
+
+    const vx = bb.x - aa.x;
+    const vy = bb.y - aa.y;
+    const len2 = vx*vx + vy*vy;
+
+    if(len2 < 0.0001){
+      return {
+        latitude: a.lat,
+        longitude: a.lon,
+        distance: Math.hypot(aa.x, aa.y),
+        t: 0
+      };
+    }
+
+    let t = ((p.x-aa.x)*vx + (p.y-aa.y)*vy) / len2;
+    t = clamp(t, 0, 1);
+
+    const qx = aa.x + vx*t;
+    const qy = aa.y + vy*t;
+
+    const ll = localMetersToLatLon(qx, qy, refLat, refLon);
+
+    return {
+      latitude: ll.latitude,
+      longitude: ll.longitude,
+      distance: Math.hypot(qx, qy),
+      t
+    };
+  }
+
+  function applyRouteSnap(pos){
+    // 목표1 이전에는 출발 경로가 없으므로 GPS를 그대로 사용한다.
+    if(targetIndex <= 0){
+      lastSnapDistance = null;
+      lastSnapStrength = 0;
+      return pos;
+    }
+
+    const prev = TARGETS[targetIndex - 1];
+    const curr = TARGETS[targetIndex];
+    const snap = nearestPointOnSegmentMeters(pos, prev, curr);
+
+    lastSnapDistance = snap.distance;
+
+    // 현재 위치가 경로에서 너무 멀면 다른 길일 가능성이 있으므로 스냅하지 않는다.
+    if(snap.distance > ROUTE_SNAP_MAX_M){
+      lastSnapStrength = 0;
+      return pos;
+    }
+
+    // accuracy가 나쁠수록 경로선 신뢰도를 높인다.
+    const accFactor = clamp((pos.accuracy - 3) / 10, 0, 1);
+
+    // 경로선에 가까울수록 강하게 붙인다.
+    const distanceFactor =
+      snap.distance <= ROUTE_SNAP_FULL_M
+        ? 1
+        : clamp(
+            1 - (snap.distance - ROUTE_SNAP_FULL_M) /
+                (ROUTE_SNAP_MAX_M - ROUTE_SNAP_FULL_M),
+            0,
+            1
+          );
+
+    // 최소 35%, accuracy가 나쁠 때 최대 약 90%까지 스냅.
+    const strength = distanceFactor * (0.35 + 0.55 * accFactor);
+    lastSnapStrength = strength;
+
+    return {
+      latitude: pos.latitude + (snap.latitude - pos.latitude) * strength,
+      longitude: pos.longitude + (snap.longitude - pos.longitude) * strength,
+      accuracy: pos.accuracy
+    };
+  }
+
+  function distanceBetweenPos(a, b){
+    if(!a || !b) return Infinity;
+    return haversine(a.latitude, a.longitude, b.latitude, b.longitude);
+  }
+
+  function addGpsSample(sample){
+    const now = Date.now();
+
+    // 너무 오래 전에 만들어진 위치는 사용하지 않는다.
+    if(sample.timestamp && now - sample.timestamp > STALE_SAMPLE_MS){
+      return false;
+    }
+
+    // 정확도가 너무 나쁜 샘플은 경로 계산에 사용하지 않는다.
+    if(!Number.isFinite(sample.accuracy) || sample.accuracy > GPS_MAX_ACCURACY_M){
+      return false;
+    }
+
+    lastRawAccuracy = sample.accuracy;
+
+    if(lastAcceptedRawPos && lastAcceptedTimestamp){
+      const dt = Math.max(0.2, (sample.timestamp - lastAcceptedTimestamp) / 1000);
+      const jump = distanceBetweenPos(lastAcceptedRawPos, sample);
+      const impliedSpeed = jump / dt;
+
+      // 1) 큰 순간 점프
+      if(jump > GPS_JUMP_LIMIT_M && sample.accuracy > 6){
+        return false;
+      }
+
+      // 2) 보행 중이라고 보기 어려운 순간 속도
+      // accuracy가 매우 좋은 샘플(<=4m)은 조금 관대하게 통과.
+      if(impliedSpeed > MAX_WALK_SPEED_MPS && sample.accuracy > 4){
+        return false;
+      }
+    }
+
+    lastAcceptedRawPos = sample;
+    lastAcceptedTimestamp = sample.timestamp;
+
+    gpsHistory.push(sample);
+    if(gpsHistory.length > GPS_HISTORY_SIZE){
+      gpsHistory.shift();
+    }
+
+    // 최근 샘플들의 accuracy 가중 평균.
+    // 최근 샘플에 약간 더 높은 시간 가중치도 부여한다.
+    let sumW = 0;
+    let lat = 0;
+    let lon = 0;
+    let acc = 0;
+
+    for(let i=0;i<gpsHistory.length;i++){
+      const p = gpsHistory[i];
+      const ageWeight = 0.65 + 0.35 * ((i + 1) / gpsHistory.length);
+      const accuracyWeight = 1 / Math.max(1, p.accuracy * p.accuracy);
+      const w = accuracyWeight * ageWeight;
+
+      sumW += w;
+      lat += p.latitude * w;
+      lon += p.longitude * w;
+      acc += p.accuracy * w;
+    }
+
+    let weighted = {
+      latitude: lat / sumW,
+      longitude: lon / sumW,
+      accuracy: acc / sumW
+    };
+
+    if(!filteredPos){
+      filteredPos = weighted;
+    }else{
+      const move = distanceBetweenPos(filteredPos, weighted);
+
+      // 정지 상태: GPS drift를 거의 고정.
+      if(move <= GPS_STILL_RADIUS_M){
+        const alpha = 0.08;
+        filteredPos = {
+          latitude:
+            filteredPos.latitude +
+            (weighted.latitude - filteredPos.latitude) * alpha,
+          longitude:
+            filteredPos.longitude +
+            (weighted.longitude - filteredPos.longitude) * alpha,
+          accuracy: weighted.accuracy
+        };
+      }else{
+        // 실제 이동은 거리와 accuracy에 따라 적응적으로 추종.
+        const accuracyFactor = clamp((12 - weighted.accuracy) / 9, 0, 1);
+
+        let alpha =
+          move > 8 ? 0.58 :
+          move > 4 ? 0.42 :
+                     0.28;
+
+        alpha *= 0.75 + accuracyFactor * 0.25;
+
+        filteredPos = {
+          latitude:
+            filteredPos.latitude +
+            (weighted.latitude - filteredPos.latitude) * alpha,
+          longitude:
+            filteredPos.longitude +
+            (weighted.longitude - filteredPos.longitude) * alpha,
+          accuracy: weighted.accuracy
+        };
+      }
+    }
+
+    // 현재 활성 경로 구간에 대한 map-matching 보정.
+    const snapped = applyRouteSnap(filteredPos);
+
+    currentPos = {
+      latitude: snapped.latitude,
+      longitude: snapped.longitude,
+      accuracy: filteredPos.accuracy
+    };
+
+    return true;
+  }
+
+  function getActiveTarget(){
+    return TARGETS[targetIndex];
+  }
+
+  function updateTargetUi(){
+    goalLabel.textContent = `${getActiveTarget().name} / ${TARGETS.length} · ${getActiveTarget().guide}`;
+    prevTargetBtn.disabled = targetIndex <= 0;
+    nextTargetBtn.disabled = targetIndex >= TARGETS.length - 1;
+  }
+
+  function setTargetIndex(nextIndex, reason='manual'){
+    const clamped = clamp(nextIndex, 0, TARGETS.length - 1);
+    if(clamped === targetIndex) return;
+
+    targetIndex = clamped;
+    arrivalLatched = false;
+    arrivalConfirmCount = 0;
+    lastSnapDistance = null;
+    lastSnapStrength = 0;
+    alignedLock = false;
+    previousRawDiff = null;
+    desiredDiff = 0;
+    visualDiff = 0;
+
+    updateTargetUi();
+    updateTargetFromGps();
+  }
+
   function updateTargetFromGps(){
     if(!currentPos) return;
 
+    const target = getActiveTarget();
+
     targetBearing = bearing(
       currentPos.latitude, currentPos.longitude,
-      TARGET.lat, TARGET.lon
+      target.lat, target.lon
     );
 
     targetDistance = haversine(
       currentPos.latitude, currentPos.longitude,
-      TARGET.lat, TARGET.lon
+      target.lat, target.lon
     );
 
     distValue.textContent = formatDistance(targetDistance);
+
+    // 5m 안에 "연속으로" 들어온 것이 확인될 때만 다음 목표로 전환.
+    // GPS 한 번 튄 값으로 자동 전환되는 것을 방지한다.
+    if(targetDistance <= ARRIVAL_RADIUS_M){
+      arrivalConfirmCount += 1;
+
+      if(!arrivalLatched && arrivalConfirmCount >= ARRIVAL_CONFIRM_COUNT){
+        arrivalLatched = true;
+
+        if(targetIndex < TARGETS.length - 1){
+          setTargetIndex(targetIndex + 1, 'arrival');
+          return;
+        }
+      }
+    }else{
+      arrivalConfirmCount = 0;
+
+      if(targetDistance >= ARRIVAL_RELEASE_M){
+        arrivalLatched = false;
+      }
+    }
   }
 
   function ingestHeading(newHeading){
@@ -397,8 +738,10 @@
 
     const delta = norm180(rawHeading-filteredHeading);
 
+    // 정지 상태의 작은 센서 떨림만 제거한다.
     if(Math.abs(delta) < 0.65) return;
 
+    // 회전 중에는 지연이 생기지 않도록 훨씬 빠르게 따라간다.
     const alpha =
       Math.abs(delta) > 35 ? 0.48 :
       Math.abs(delta) > 18 ? 0.38 :
@@ -668,17 +1011,25 @@
     routeShadow.setAttribute('d',route.ribbonD);
     routeRim.setAttribute('d',route.rimD);
 
-    // 화살표(chevron) 흐름: 경과 시간만큼 phase(m)를 전진시켜
-    // 화살표들이 목표를 향해 계속 흘러가는 것처럼 보이게 한다.
+    // 첨부파일과 동일한 지면 미터 기반 chevron 애니메이션
     if(lastTs == null) lastTs = ts || performance.now();
     const dt = clamp((ts||performance.now())-lastTs, 0, 48);
     lastTs = ts || performance.now();
     chevronPhase += dt*CHEVRON_SPEED_MPS/1000;
 
     if(route.centerline){
-      updateChevrons(route.centerline, route.W, route.H, route.f, route.pitchRad, chevronPhase, CHEVRON_SPACING_M);
+      updateChevrons(
+        route.centerline,
+        route.W,
+        route.H,
+        route.f,
+        route.pitchRad,
+        chevronPhase,
+        CHEVRON_SPACING_M
+      );
     }
 
+    // 첨부파일과 동일한 목표지점 pulse / halo / dot
     if(route.end){
       routeEndPulse.setAttribute('cx', route.end.x);
       routeEndPulse.setAttribute('cy', route.end.y);
@@ -716,13 +1067,18 @@
     }
 
     debug.textContent =
-`목표: ${TARGET.lat}, ${TARGET.lon}
+`목표: ${getActiveTarget().name} (${getActiveTarget().lat}, ${getActiveTarget().lon})
 현재: ${currentPos ? currentPos.latitude.toFixed(7)+', '+currentPos.longitude.toFixed(7) : '-'}
 거리: ${targetDistance != null ? targetDistance.toFixed(1)+' m' : '-'}
+GPS raw accuracy: ${lastRawAccuracy != null ? lastRawAccuracy.toFixed(1)+' m' : '-'}
+GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
+경로 이탈거리: ${lastSnapDistance != null ? lastSnapDistance.toFixed(1)+' m' : '-'}
+경로 스냅강도: ${(lastSnapStrength*100).toFixed(0)}%
+도착 확인: ${arrivalConfirmCount}/${ARRIVAL_CONFIRM_COUNT}
 목표 방위각: ${targetBearing != null ? targetBearing.toFixed(1)+'°' : '-'}
 필터 헤딩: ${filteredHeading != null ? filteredHeading.toFixed(1)+'°' : '-'}
-방향 차이: ${visualDiff.toFixed(1)}°
-카메라 피치: ${filteredPitchDeg != null ? filteredPitchDeg.toFixed(1)+'° (센서)' : CAM_PITCH_DEG_DEFAULT+'° (기본값)'}`;
+카메라 피치: ${filteredPitchDeg != null ? filteredPitchDeg.toFixed(1)+'° (센서)' : CAM_PITCH_DEG_DEFAULT+'° (기본값)'}
+방향 차이: ${visualDiff.toFixed(1)}°`;
 
     rafId = requestAnimationFrame(renderRoute);
   }
@@ -746,14 +1102,28 @@
     }
 
     navigator.geolocation.watchPosition(pos=>{
-      currentPos = {
+      const sample = {
         latitude: pos.coords.latitude,
         longitude: pos.coords.longitude,
-        accuracy: pos.coords.accuracy
+        accuracy: pos.coords.accuracy,
+        timestamp: pos.timestamp || Date.now()
       };
 
-      gpsStatus.textContent = `GPS ±${Math.round(pos.coords.accuracy)}m`;
-      updateTargetFromGps();
+      const accepted = addGpsSample(sample);
+
+      if(accepted){
+        const snapText =
+          lastSnapDistance == null
+            ? ''
+            : ` · 경로 ${lastSnapDistance.toFixed(1)}m`;
+
+        gpsStatus.textContent =
+          `GPS ±${Math.round(currentPos.accuracy)}m · 보정${snapText}`;
+        updateTargetFromGps();
+      }else{
+        gpsStatus.textContent =
+          `GPS ±${Math.round(pos.coords.accuracy)}m · 대기`;
+      }
     },err=>{
       gpsStatus.textContent = 'GPS 오류';
       console.error(err);
@@ -801,6 +1171,14 @@
     }
   });
 
+  prevTargetBtn.addEventListener('click',()=>{
+    setTargetIndex(targetIndex - 1, 'manual');
+  });
+
+  nextTargetBtn.addEventListener('click',()=>{
+    setTargetIndex(targetIndex + 1, 'manual');
+  });
+
   debugBtn.addEventListener('click',()=>{
     debug.style.display = debug.style.display === 'none' ? 'block' : 'none';
   });
@@ -809,14 +1187,14 @@
     if(!rafId) renderRoute(performance.now());
   });
 
+  // 권한 전에도 레이아웃 형태는 보이도록 초기 렌더.
   routeRibbon.setAttribute('d','');
   routeShadow.setAttribute('d','');
   routeRim.setAttribute('d','');
-
-  // 카메라/GPS/방향센서 권한 여부와 관계없이 경로 렌더 루프는 즉시 시작한다.
-  // 권한이 통과하기 전까지는 "정면 0°" 기본값으로 그려지다가, 실제 GPS/
-  // 방향센서 값이 들어오는 즉시 자연스럽게 그 값으로 갱신된다.
-  rafId = requestAnimationFrame(renderRoute);
+  routeEndPulse.style.display = 'none';
+  routeEndHalo.style.display = 'none';
+  routeEndDot.style.display = 'none';
+  updateTargetUi();
 })();
 </script>
 </body>
