@@ -3,7 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-<title>AR Navigation v6.1</title>
+<title>AR Navigation v6.2</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  crossorigin="">
+
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
@@ -255,6 +258,109 @@
     color: white;
     border: 1px solid rgba(255,255,255,.17);
   }
+
+  #mapTargetBtn {
+    position: absolute;
+    z-index: 12;
+    top: max(58px, calc(env(safe-area-inset-top) + 58px));
+    right: 14px;
+    min-height: 0;
+    width: auto;
+    flex: none;
+    padding: 9px 12px;
+    border-radius: 999px;
+    background: rgba(20,20,20,.72);
+    color: #fff;
+    border: 1px solid rgba(255,255,255,.18);
+    backdrop-filter: blur(10px);
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+  #targetMapModal {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: none;
+    flex-direction: column;
+    background: #111;
+  }
+  #targetMapModal.show { display: flex; }
+
+  #targetMapHeader {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: max(12px, env(safe-area-inset-top)) 12px 12px;
+    background: rgba(18,18,18,.96);
+    color: #fff;
+  }
+  #targetMapTitle {
+    flex: 1;
+    min-width: 0;
+  }
+  #targetMapTitle strong {
+    display: block;
+    font-size: 15px;
+    margin-bottom: 3px;
+  }
+  #targetMapTitle span {
+    display: block;
+    font-size: 11px;
+    opacity: .72;
+  }
+  #targetMapClose {
+    flex: 0 0 auto;
+    min-height: 38px;
+    padding: 8px 12px;
+    border-radius: 12px;
+    background: rgba(255,255,255,.1);
+    color: #fff;
+    border: 1px solid rgba(255,255,255,.16);
+    font-size: 13px;
+  }
+
+  #targetMap {
+    flex: 1 1 auto;
+    min-height: 0;
+    width: 100%;
+    background: #ddd;
+  }
+
+  #targetMapFooter {
+    flex: 0 0 auto;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 10px;
+    align-items: center;
+    padding: 12px 12px max(12px, env(safe-area-inset-bottom));
+    background: rgba(18,18,18,.98);
+    color: #fff;
+  }
+  #targetCoordText {
+    min-width: 0;
+    font-size: 12px;
+    line-height: 1.45;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  #targetMapConfirm {
+    flex: 0 0 auto;
+    min-height: 42px;
+    padding: 10px 15px;
+    border-radius: 13px;
+    background: #fff;
+    color: #111;
+    font-size: 13px;
+    font-weight: 800;
+  }
+
+  .leaflet-container {
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+
 </style>
 </head>
 <body>
@@ -286,13 +392,13 @@
 
   <div id="topStatus">
     <div class="pill" id="gpsStatus">GPS 대기</div>
-    <div class="pill" id="versionLabel">v6.1</div>
+    <div class="pill" id="versionLabel">v6.2</div>
     <div class="pill" id="headingStatus">방향 대기</div>
   </div>
 
   <div id="bottomHud">
     <div id="distBlock">
-      <div id="goalLabel">목표 1 / 4</div>
+      <div id="goalLabel">목표 1 / 5</div>
       <svg id="distPin" viewBox="0 0 24 28">
         <path d="M12 0C5.4 0 0 5.3 0 11.8 0 20.5 12 28 12 28s12-7.5 12-16.2C24 5.3 18.6 0 12 0z" fill="#ff8a1e"></path>
         <path d="M12 2.6c-5.1 0-9.2 4.1-9.2 9.2 0 6.8 9.2 13.2 9.2 13.2s9.2-6.4 9.2-13.2c0-5.1-4.1-9.2-9.2-9.2z" fill="#ffab52"></path>
@@ -305,6 +411,8 @@
   <div id="sensorToast" role="status" aria-live="polite"></div>
   <div id="debug"></div>
 
+  <button id="mapTargetBtn" type="button">목표 변경</button>
+
   <div id="controls">
     <button id="prevTargetBtn" class="secondary">이전 목표</button>
     <button id="startBtn">카메라 · 위치 · 방향 시작</button>
@@ -313,6 +421,23 @@
   </div>
 </div>
 
+<div id="targetMapModal" aria-hidden="true">
+  <div id="targetMapHeader">
+    <div id="targetMapTitle">
+      <strong>목표 지점 변경</strong>
+      <span>지도를 터치한 뒤 ‘이 위치로 변경’을 누르세요.</span>
+    </div>
+    <button id="targetMapClose" type="button">닫기</button>
+  </div>
+  <div id="targetMap"></div>
+  <div id="targetMapFooter">
+    <div id="targetCoordText">지도를 터치해 위치를 선택하세요.</div>
+    <button id="targetMapConfirm" type="button">이 위치로 변경</button>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+  crossorigin=""></script>
 <script>
 (() => {
   const TARGETS = [
@@ -427,6 +552,16 @@
   const nextTargetBtn = document.getElementById('nextTargetBtn');
   const debugBtn = document.getElementById('debugBtn');
 
+  const mapTargetBtn = document.getElementById('mapTargetBtn');
+  const targetMapModal = document.getElementById('targetMapModal');
+  const targetMapClose = document.getElementById('targetMapClose');
+  const targetMapConfirm = document.getElementById('targetMapConfirm');
+  const targetCoordText = document.getElementById('targetCoordText');
+
+  let targetMap = null;
+  let targetMapMarker = null;
+  let pendingTargetLatLng = null;
+
   let currentPos = null;
   let targetBearing = null;
   let targetDistance = null;
@@ -472,7 +607,9 @@
   // 방향 센서 불안정 감지 / 토스트
   const headingJitterSamples = [];
   let compassPoorCount = 0;
+  let directCompassAccuracyAvailable = false;
   let lastCompassToastAt = 0;
+  let lastToastMessage = '';
   let toastTimer = null;
   const COMPASS_TOAST_COOLDOWN_MS = 30000;
 
@@ -822,9 +959,17 @@
 
   function showSensorToast(message, duration=4200){
     const now = Date.now();
+
+    // 같은 토스트가 이미 화면에 떠 있으면 다시 시작하지 않는다.
+    if(sensorToast.classList.contains('show') && lastToastMessage === message){
+      return;
+    }
+
+    // 어떤 감지 로직에서 호출됐든 하나의 공통 쿨다운을 사용한다.
     if(now - lastCompassToastAt < COMPASS_TOAST_COOLDOWN_MS) return;
 
     lastCompassToastAt = now;
+    lastToastMessage = message;
     sensorToast.textContent = message;
     sensorToast.classList.add('show');
 
@@ -835,6 +980,10 @@
   }
 
   function recordHeadingStability(heading){
+    // webkitCompassAccuracy가 실제로 제공되는 기기에서는 직접 정확도만 사용한다.
+    // 두 감지기가 동시에 토스트를 만들지 않게 하기 위한 분기다.
+    if(directCompassAccuracyAvailable) return;
+
     const now = performance.now();
     headingJitterSamples.push({t:now, h:norm360(heading)});
 
@@ -943,6 +1092,9 @@
 
       // iOS/Safari 계열에서 제공되는 경우 직접적인 나침반 정확도도 활용한다.
       if(Number.isFinite(e.webkitCompassAccuracy)){
+        directCompassAccuracyAvailable = true;
+        headingJitterSamples.length = 0;
+
         if(e.webkitCompassAccuracy > 25){
           compassPoorCount++;
           if(compassPoorCount >= 8){
@@ -1412,6 +1564,110 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
     }
   }
 
+  function setPendingTarget(lat, lon, moveMap=false){
+    pendingTargetLatLng = {lat, lon};
+    targetCoordText.textContent =
+      `${lat.toFixed(7)}, ${lon.toFixed(7)}`;
+
+    if(targetMap){
+      if(targetMapMarker){
+        targetMapMarker.setLatLng([lat, lon]);
+      }else{
+        targetMapMarker = L.marker([lat, lon]).addTo(targetMap);
+      }
+
+      if(moveMap){
+        targetMap.panTo([lat, lon]);
+      }
+    }
+  }
+
+  function ensureTargetMap(center){
+    if(typeof L === 'undefined'){
+      targetCoordText.textContent =
+        '지도를 불러오지 못했습니다. 인터넷 연결을 확인해 주세요.';
+      return false;
+    }
+
+    if(!targetMap){
+      targetMap = L.map('targetMap', {
+        zoomControl: true,
+        attributionControl: true
+      });
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap contributors'
+      }).addTo(targetMap);
+
+      targetMap.on('click', e=>{
+        setPendingTarget(e.latlng.lat, e.latlng.lng);
+      });
+    }
+
+    targetMap.setView(center, 18);
+    return true;
+  }
+
+  function openTargetMap(){
+    const target = getActiveTarget();
+    const center = currentPos
+      ? [currentPos.latitude, currentPos.longitude]
+      : [target.lat, target.lon];
+
+    targetMapModal.classList.add('show');
+    targetMapModal.setAttribute('aria-hidden', 'false');
+
+    requestAnimationFrame(()=>{
+      if(!ensureTargetMap(center)) return;
+
+      targetMap.invalidateSize(true);
+
+      // 열 때마다 현재 목표 좌표를 선택 상태로 표시한다.
+      setPendingTarget(target.lat, target.lon, false);
+    });
+  }
+
+  function closeTargetMap(){
+    targetMapModal.classList.remove('show');
+    targetMapModal.setAttribute('aria-hidden', 'true');
+  }
+
+  function applyPendingTarget(){
+    if(!pendingTargetLatLng) return;
+
+    const target = getActiveTarget();
+    target.lat = pendingTargetLatLng.lat;
+    target.lon = pendingTargetLatLng.lon;
+    target.guide = '사용자 지정 목표';
+
+    // 새 좌표를 즉시 현재 목표로 다시 계산한다.
+    targetBearing = null;
+    targetDistance = null;
+    alignedLock = false;
+    previousRawDiff = null;
+    desiredDiff = 0;
+    visualDiff = 0;
+    arrivalLatched = false;
+    arrivalConfirmCount = 0;
+    lastSnapDistance = null;
+    lastSnapStrength = 0;
+    lastRouteLengthTs = null;
+
+    updateTargetUi();
+    updateTargetFromGps();
+    closeTargetMap();
+
+    sensorToast.classList.remove('show');
+    lastToastMessage = '';
+    sensorToast.textContent = '지도에서 선택한 위치로 목표를 변경했습니다.';
+    sensorToast.classList.add('show');
+    if(toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(()=>{
+      sensorToast.classList.remove('show');
+    }, 2600);
+  }
+
   startBtn.addEventListener('click',async()=>{
     if(started) return;
 
@@ -1446,6 +1702,10 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
   debugBtn.addEventListener('click',()=>{
     debug.style.display = debug.style.display === 'none' ? 'block' : 'none';
   });
+
+  mapTargetBtn.addEventListener('click', openTargetMap);
+  targetMapClose.addEventListener('click', closeTargetMap);
+  targetMapConfirm.addEventListener('click', applyPendingTarget);
 
   window.addEventListener('resize',()=>{
     lastRouteLengthTs = null;
