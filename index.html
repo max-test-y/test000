@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-<title>AR Navigation v6.2</title>
+<title>AR Navigation v6.3</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
   crossorigin="">
 
@@ -75,6 +75,13 @@
     stroke: rgba(220,242,255,.55);
     stroke-width: 2;
     stroke-linecap: round;
+  }
+  #routeEndBorder {
+    fill: none;
+    stroke: #2f8dff;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    pointer-events: none;
   }
   #routeChevrons path {
     fill: none;
@@ -384,6 +391,7 @@
     <path id="routeBottomSkirt"></path>
     <path id="routeRibbon"></path>
     <path id="routeRim"></path>
+    <path id="routeEndBorder"></path>
     <g id="routeChevrons"></g>
     <circle id="routeEndPulse" r="16"></circle>
     <circle id="routeEndHalo" r="16"></circle>
@@ -392,7 +400,7 @@
 
   <div id="topStatus">
     <div class="pill" id="gpsStatus">GPS 대기</div>
-    <div class="pill" id="versionLabel">v6.2</div>
+    <div class="pill" id="versionLabel">v6.3</div>
     <div class="pill" id="headingStatus">방향 대기</div>
   </div>
 
@@ -526,6 +534,7 @@
   const routeShadow = document.getElementById('routeShadow');
   const routeBottomSkirt = document.getElementById('routeBottomSkirt');
   const routeRim = document.getElementById('routeRim');
+  const routeEndBorder = document.getElementById('routeEndBorder');
   const routeChevrons = document.getElementById('routeChevrons');
   const routeEndPulse = document.getElementById('routeEndPulse');
   const routeEndHalo = document.getElementById('routeEndHalo');
@@ -600,6 +609,11 @@
   // 목표가 바뀌거나 GPS가 순간적으로 튀어도 이 값은 갑자기 변하지 않는다.
   let smoothedRouteLengthM = ROUTE_MAX_LEN_M;
   let lastRouteLengthTs = null;
+
+  // 목표 마커 전용 화면 좌표 안정화 상태
+  let markerScreenX = null;
+  let markerScreenY = null;
+  let markerLastTs = null;
 
   let rafId = null;
   let started = false;
@@ -894,6 +908,9 @@
     visualDiff = 0;
     targetBearing = null;
     lastRouteLengthTs = null;
+    markerScreenX = null;
+    markerScreenY = null;
+    markerLastTs = null;
 
     updateTargetUi();
     updateTargetFromGps();
@@ -1295,9 +1312,11 @@
     // 리본이 실제로 그려진 마지막 지점(=화면상 가장 먼 지점)을
     // 목적지 마커/펄스 위치로 사용한다.
     const li = left.length-1;
+    const endLeft = { x:left[li].x, y:left[li].y };
+    const endRight = { x:right[li].x, y:right[li].y };
     const end = {
-      x: (left[li].x+right[li].x)/2,
-      y: (left[li].y+right[li].y)/2
+      x: (endLeft.x+endRight.x)/2,
+      y: (endLeft.y+endRight.y)/2
     };
 
     // 하단 전용 오버스캔 영역. 리본보다 뒤에서 같은 그라데이션으로 채운다.
@@ -1308,7 +1327,77 @@
       ` L ${bottomRightX} ${bottomY}` +
       ` L ${bottomLeftX} ${bottomY} Z`;
 
-    return { ribbonD, rimD, skirtD, centerline, end, W, H, f, pitchRad, pathLength };
+    return { ribbonD, rimD, skirtD, centerline, end, endLeft, endRight, W, H, f, pitchRad, pathLength };
+  }
+
+  function getStableTargetMarker(route, ts){
+    if(
+      !route ||
+      targetBearing == null ||
+      filteredHeading == null ||
+      !Number.isFinite(targetDistance)
+    ){
+      return null;
+    }
+
+    // 실제 목표 방향과, 목표까지 남은 거리(최대 50m)를 직접 투영한다.
+    // smoothedRouteLengthM을 사용해 GPS 거리값이 순간적으로 튀는 영향을 줄인다.
+    const markerDistance = clamp(
+      smoothedRouteLengthM,
+      ROUTE_MIN_LEN_M,
+      ROUTE_MAX_LEN_M
+    );
+
+    const markerDiff = toRad(
+      clamp(norm180(targetBearing-filteredHeading), -180, 180)
+    );
+
+    const worldX = Math.sin(markerDiff)*markerDistance;
+    const worldZ = Math.cos(markerDiff)*markerDistance;
+
+    const projected = project(
+      worldX, worldZ,
+      route.W, route.H, route.f, route.pitchRad
+    );
+
+    if(!projected) return null;
+
+    const targetMarkerOffsetY = clamp(route.H*0.065, 44, 72);
+    const wantedX = projected.x;
+    const wantedY = projected.y-targetMarkerOffsetY;
+    const now = Number.isFinite(ts) ? ts : performance.now();
+
+    if(markerScreenX == null || markerScreenY == null || markerLastTs == null){
+      markerScreenX = wantedX;
+      markerScreenY = wantedY;
+      markerLastTs = now;
+      return {x:markerScreenX, y:markerScreenY};
+    }
+
+    const dt = clamp((now-markerLastTs)/1000, 0, 0.08);
+    markerLastTs = now;
+
+    const dx = wantedX-markerScreenX;
+    const dy = wantedY-markerScreenY;
+    const movePx = Math.hypot(dx,dy);
+
+    // 3px 이하는 센서/GPS 미세 흔들림으로 보고 고정한다.
+    if(movePx <= 3){
+      return {x:markerScreenX, y:markerScreenY};
+    }
+
+    // 큰 실제 회전은 빠르게, 작은 흔들림은 느리게 추종.
+    const response =
+      movePx > 120 ? 9.0 :
+      movePx > 60  ? 6.0 :
+      movePx > 24  ? 3.8 :
+                     2.2;
+
+    const alpha = 1-Math.exp(-response*dt);
+    markerScreenX += dx*alpha;
+    markerScreenY += dy*alpha;
+
+    return {x:markerScreenX, y:markerScreenY};
   }
 
   // 지면 위 실제 미터 단위로 화살표를 배치하고 project()로 투영한다.
@@ -1417,6 +1506,30 @@
     routeBottomSkirt.setAttribute('d',route.skirtD || '');
     routeRim.setAttribute('d',route.rimD);
 
+    // 가까워질수록 유도선 끝의 종료선을 더 두껍고 진하게 표시.
+    if(route.endLeft && route.endRight){
+      routeEndBorder.setAttribute(
+        'd',
+        `M ${route.endLeft.x.toFixed(1)} ${route.endLeft.y.toFixed(1)} ` +
+        `L ${route.endRight.x.toFixed(1)} ${route.endRight.y.toFixed(1)}`
+      );
+
+      const proximity = 1-clamp(
+        (route.pathLength-ROUTE_MIN_LEN_M) /
+        (ROUTE_MAX_LEN_M-ROUTE_MIN_LEN_M),
+        0, 1
+      );
+
+      const borderWidth = 2.5 + proximity*7.5;
+      const borderOpacity = 0.30 + proximity*0.70;
+
+      routeEndBorder.setAttribute('stroke-width', borderWidth.toFixed(1));
+      routeEndBorder.setAttribute('opacity', borderOpacity.toFixed(2));
+      routeEndBorder.style.display = '';
+    }else{
+      routeEndBorder.style.display = 'none';
+    }
+
     // 첨부파일과 동일한 지면 미터 기반 chevron 애니메이션
     if(lastTs == null) lastTs = ts || performance.now();
     const dt = clamp((ts||performance.now())-lastTs, 0, 48);
@@ -1437,18 +1550,15 @@
     }
 
     // 첨부파일과 동일한 목표지점 pulse / halo / dot
-    if(route.end){
-      // 목표 마커는 유도선 끝점과 겹치지 않고 위쪽에 떠 있도록 배치한다.
-      const targetMarkerOffsetY = clamp(route.H * 0.065, 44, 72);
-      const markerX = route.end.x;
-      const markerY = route.end.y - targetMarkerOffsetY;
+    const stableMarker = getStableTargetMarker(route, ts);
 
-      routeEndPulse.setAttribute('cx', markerX);
-      routeEndPulse.setAttribute('cy', markerY);
-      routeEndHalo.setAttribute('cx', markerX);
-      routeEndHalo.setAttribute('cy', markerY);
-      routeEndDot.setAttribute('cx', markerX);
-      routeEndDot.setAttribute('cy', markerY);
+    if(stableMarker){
+      routeEndPulse.setAttribute('cx', stableMarker.x);
+      routeEndPulse.setAttribute('cy', stableMarker.y);
+      routeEndHalo.setAttribute('cx', stableMarker.x);
+      routeEndHalo.setAttribute('cy', stableMarker.y);
+      routeEndDot.setAttribute('cx', stableMarker.x);
+      routeEndDot.setAttribute('cy', stableMarker.y);
       routeEndPulse.style.display = '';
       routeEndHalo.style.display = '';
       routeEndDot.style.display = '';
@@ -1653,6 +1763,9 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
     lastSnapDistance = null;
     lastSnapStrength = 0;
     lastRouteLengthTs = null;
+    markerScreenX = null;
+    markerScreenY = null;
+    markerLastTs = null;
 
     updateTargetUi();
     updateTargetFromGps();
@@ -1723,6 +1836,7 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
   routeShadow.setAttribute('d','');
   routeBottomSkirt.setAttribute('d','');
   routeRim.setAttribute('d','');
+  routeEndBorder.setAttribute('d','');
   routeEndPulse.style.display = 'none';
   routeEndHalo.style.display = 'none';
   routeEndDot.style.display = 'none';
