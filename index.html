@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-<title>AR Navigation v7.6</title>
+<title>AR Navigation v7.7</title>
 <meta name="theme-color" content="#0b0d10">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
   crossorigin="">
@@ -79,7 +79,7 @@
   }
   #routeEndBorder {
     fill: none;
-    stroke: #2f8dff;
+    stroke: #4db5ff;
     stroke-linecap: round;
     stroke-linejoin: round;
     pointer-events: none;
@@ -105,7 +105,7 @@
   }
   #routeEndDot {
     fill: #eaf6ff;
-    stroke: #2f8dff;
+    stroke: #4db5ff;
     stroke-width: 4;
   }
   @keyframes endPulse {
@@ -149,18 +149,18 @@
     bottom:calc(max(96px, calc(env(safe-area-inset-bottom) + 96px)) + min(20dvh, 220px));
     transform:translateX(-50%);
     width:min(91vw, 420px);
-    min-height:72px;
-    padding:11px 56px 11px 14px;
-    border-radius:20px;
-    background:linear-gradient(180deg, rgba(18,22,29,.72), rgba(10,13,18,.64));
-    border:1px solid rgba(255,255,255,.12);
-    box-shadow:0 10px 28px rgba(0,0,0,.20), inset 0 1px 0 rgba(255,255,255,.06);
-    backdrop-filter:blur(18px) saturate(1.06);
-    -webkit-backdrop-filter:blur(18px) saturate(1.06);
+    min-height:64px;
+    padding:8px 54px 8px 8px;
+    border-radius:0;
+    background:transparent;
+    border:0;
+    box-shadow:none;
+    backdrop-filter:none;
+    -webkit-backdrop-filter:none;
     z-index:15;
     display:flex;
     align-items:center;
-    gap:11px;
+    gap:10px;
     color:#fff;
   }
 
@@ -173,6 +173,11 @@
     align-items:center;
     min-width:0;
     flex:1;
+    padding:8px 10px;
+    border-radius:14px;
+    background:rgba(8,12,18,.28);
+    backdrop-filter:blur(8px);
+    -webkit-backdrop-filter:blur(8px);
   }
   #goalLabel {
     grid-column:2;
@@ -433,37 +438,6 @@
     border-radius:50%;
     animation:miniMapPulse 1.45s ease-out infinite;
   }
-  .mini-map-user-marker::after {
-    content:"";
-    position:absolute;
-    left:50%;
-    bottom:50%;
-    width:72px;
-    height:40px;
-    transform:translateX(-50%);
-    transform-origin:50% 100%;
-    border-radius:72px 72px 0 0;
-    background:
-      radial-gradient(
-        ellipse at 50% 100%,
-        rgba(22,119,255,.34) 0%,
-        rgba(22,119,255,.24) 34%,
-        rgba(22,119,255,.12) 58%,
-        rgba(22,119,255,.035) 78%,
-        rgba(22,119,255,0) 100%
-      );
-    filter:blur(.2px);
-    pointer-events:none;
-    z-index:-1;
-  }
-  .mini-map-user-marker {
-    --marker-counter-rotation: 0deg;
-  }
-  .mini-map-user-marker::after {
-    transform:
-      translateX(-50%)
-      rotate(var(--marker-counter-rotation));
-  }
 
   @keyframes miniMapPulse {
     0%{transform:scale(.65);opacity:.88}
@@ -600,7 +574,7 @@
     --ui-border-strong: rgba(255,255,255,.22);
     --ui-text: #f7f9fc;
     --ui-muted: rgba(247,249,252,.68);
-    --ui-accent: #2f8dff;
+    --ui-accent: #4db5ff;
     --ui-accent-strong: #1677ff;
     --ui-radius: 18px;
     --ui-shadow: 0 10px 34px rgba(0,0,0,.30);
@@ -1145,13 +1119,13 @@
   <svg id="routeSvg" aria-hidden="true">
     <defs>
       <linearGradient id="routeFill" x1="0%" y1="0%" x2="100%" y2="0%">
-        <stop offset="0%"  stop-color="#8fd8ff" stop-opacity=".52"></stop>
-        <stop offset="46%" stop-color="#2f8dff" stop-opacity=".56"></stop>
-        <stop offset="100%" stop-color="#0b3f9e" stop-opacity=".60"></stop>
+        <stop offset="0%"  stop-color="#d8f3ff" stop-opacity=".52"></stop>
+        <stop offset="46%" stop-color="#55b8ff" stop-opacity=".56"></stop>
+        <stop offset="100%" stop-color="#1677ff" stop-opacity=".60"></stop>
       </linearGradient>
       <linearGradient id="chevronStroke" x1="0" y1="1" x2="0" y2="0">
-        <stop offset="0%" stop-color="#eaf6ff" stop-opacity=".95"></stop>
-        <stop offset="100%" stop-color="#8ad2ff" stop-opacity=".9"></stop>
+        <stop offset="0%" stop-color="#ffffff" stop-opacity=".95"></stop>
+        <stop offset="100%" stop-color="#bfe8ff" stop-opacity=".9"></stop>
       </linearGradient>
     </defs>
     <path id="routeShadow"></path>
@@ -1167,7 +1141,7 @@
 
   <div id="topStatus">
     <div class="pill" id="gpsStatus">GPS 대기</div>
-    <div class="pill" id="versionLabel">v7.6</div>
+    <div class="pill" id="versionLabel">v7.7</div>
     <div class="pill" id="headingStatus">방향 대기</div>
   </div>
 
@@ -2941,13 +2915,6 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
       const counter = -miniMapHeadingDeg.toFixed(2);
       miniMapUserMarkerEl.style.transform =
         `rotate(${counter}deg) scale(${inverseScale})`;
-
-      // 마커 본체는 정방향으로 유지하되, 반원형 방향 fan은
-      // 실제 사용자가 바라보는 화면 상단 방향을 가리키도록 다시 보정.
-      miniMapUserMarkerEl.style.setProperty(
-        '--marker-counter-rotation',
-        `${miniMapHeadingDeg.toFixed(2)}deg`
-      );
     }
   }
 
