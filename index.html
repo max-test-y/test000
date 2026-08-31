@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-<title>AR Navigation v6.3</title>
+<title>AR Navigation v6.4</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
   crossorigin="">
 
@@ -368,6 +368,49 @@
     font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   }
 
+
+  #miniMapShell {
+    position:absolute; left:0; right:0; bottom:0;
+    height:20dvh; min-height:145px; max-height:220px;
+    z-index:6; overflow:hidden; pointer-events:none;
+    border-top:1px solid rgba(255,255,255,.34);
+    box-shadow:0 -10px 28px rgba(0,0,0,.22); background:#dfe6ec;
+  }
+  #miniMapRotator {
+    position:absolute; left:50%; top:50%; width:145%; height:210%;
+    transform-origin:50% 50%; will-change:transform;
+  }
+  #miniMap { position:absolute; inset:0; width:100%; height:100%; background:#dfe6ec; }
+  #miniMapUserMarker {
+    position:absolute; left:50%; top:50%; width:18px; height:18px;
+    margin-left:-9px; margin-top:-9px; border-radius:50%;
+    background:#1677ff; border:3px solid #fff; box-shadow:0 2px 10px rgba(0,0,0,.35); z-index:8;
+  }
+  #miniMapUserMarker::before {
+    content:""; position:absolute; inset:-7px; border:2px solid rgba(22,119,255,.58);
+    border-radius:50%; animation:miniMapPulse 1.45s ease-out infinite;
+  }
+  @keyframes miniMapPulse {
+    0%{transform:scale(.65);opacity:.88}
+    72%{transform:scale(1.65);opacity:0}
+    100%{transform:scale(1.65);opacity:0}
+  }
+  #miniMapHeading {
+    position:absolute; left:50%; top:calc(50% - 25px); z-index:9;
+    width:0; height:0; transform:translateX(-50%);
+    border-left:7px solid transparent; border-right:7px solid transparent;
+    border-bottom:18px solid #0b3f9e;
+  }
+  #miniMapSegmentBadge {
+    position:absolute; left:10px; top:9px; z-index:10; padding:5px 8px;
+    border-radius:999px; color:#fff; background:rgba(18,18,18,.62);
+    border:1px solid rgba(255,255,255,.18); backdrop-filter:blur(8px);
+    font-size:11px; font-weight:800; line-height:1;
+  }
+  #controls { bottom:calc(max(18px, env(safe-area-inset-bottom)) + min(20dvh, 220px)); }
+  #bottomHud { bottom:calc(max(96px, calc(env(safe-area-inset-bottom) + 96px)) + min(20dvh, 220px)); }
+  #sensorToast { bottom:calc(max(150px, calc(env(safe-area-inset-bottom) + 150px)) + min(20dvh, 220px)); }
+
 </style>
 </head>
 <body>
@@ -400,7 +443,7 @@
 
   <div id="topStatus">
     <div class="pill" id="gpsStatus">GPS 대기</div>
-    <div class="pill" id="versionLabel">v6.3</div>
+    <div class="pill" id="versionLabel">v6.4</div>
     <div class="pill" id="headingStatus">방향 대기</div>
   </div>
 
@@ -420,6 +463,13 @@
   <div id="debug"></div>
 
   <button id="mapTargetBtn" type="button">목표 변경</button>
+
+  <div id="miniMapShell" aria-label="현재 위치 2D 지도">
+    <div id="miniMapRotator"><div id="miniMap"></div></div>
+    <div id="miniMapUserMarker"></div>
+    <div id="miniMapHeading"></div>
+    <div id="miniMapSegmentBadge">지도 준비 중</div>
+  </div>
 
   <div id="controls">
     <button id="prevTargetBtn" class="secondary">이전 목표</button>
@@ -446,6 +496,7 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
   crossorigin=""></script>
+<script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=9b5ab57bb6b27a646d2038ed8079c015&autoload=false"></script>
 <script>
 (() => {
   const TARGETS = [
@@ -480,6 +531,17 @@
       guide: '[서울 중구 태평로2가 113-1] 도착'
     }
   ];
+  const MINI_MAP_ROUTE_POINTS = [
+    {seq:1,guideMent:'롯데문화센터까지 179m 이동',lat:37.5656083,lng:126.9810115},
+    {seq:2,guideMent:'롯데문화센터 앞에서 시청삼거리까지 왼쪽길로 114m 이동(을지로)',lat:37.5658893,lng:126.9805994},
+    {seq:3,guideMent:'시청삼거리에서 101m 이동',lat:37.5658711,lng:126.9793000},
+    {seq:4,guideMent:'횡단보도 이용',lat:37.5651033,lng:126.9787614},
+    {seq:5,guideMent:'85m 이동(소공로)',lat:37.5652114,lng:126.9784761},
+    {seq:6,guideMent:'횡단보도 이용',lat:37.5651067,lng:126.9775616},
+    {seq:7,guideMent:'4m 이동(소공로)',lat:37.5648400,lng:126.9775028},
+    {seq:8,guideMent:'시청역 6번 출구로 진입하여 역사 내 이동',lat:37.5648364,lng:126.9775617}
+  ];
+
 
   const ARRIVAL_RADIUS_M = 5;
 
@@ -566,6 +628,13 @@
   const targetMapClose = document.getElementById('targetMapClose');
   const targetMapConfirm = document.getElementById('targetMapConfirm');
   const targetCoordText = document.getElementById('targetCoordText');
+  const miniMapRotator = document.getElementById('miniMapRotator');
+  const miniMapSegmentBadge = document.getElementById('miniMapSegmentBadge');
+
+  let miniMap = null;
+  let miniMapReady = false;
+  let miniMapHeadingDeg = 0;
+  let miniMapLastSegment = -1;
 
   let targetMap = null;
   let targetMapMarker = null;
@@ -1586,6 +1655,7 @@
 
     if(filteredHeading != null){
       headingStatus.textContent = `방향 ${Math.round(filteredHeading)}°`;
+      updateMiniMap();
     }
 
     debug.textContent =
@@ -1645,6 +1715,7 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
         gpsStatus.textContent =
           `GPS ${gpsQuality.label} · ±${Math.round(currentPos.accuracy)}m${snapText}`;
         updateTargetFromGps();
+        updateMiniMap();
       }else{
         const gpsQuality = getGpsQuality(pos.coords.accuracy);
         gpsStatus.textContent =
@@ -1671,6 +1742,80 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
       window.addEventListener('deviceorientationabsolute',handleOrientation,true);
     }else{
       window.addEventListener('deviceorientation',handleOrientation,true);
+    }
+  }
+
+
+  function closestPointOnSegmentLocal(px,py,ax,ay,bx,by){
+    const vx=bx-ax,vy=by-ay,wx=px-ax,wy=py-ay,vv=vx*vx+vy*vy;
+    const t=vv>0?clamp((wx*vx+wy*vy)/vv,0,1):0;
+    const x=ax+vx*t,y=ay+vy*t;
+    return {t,d:Math.hypot(px-x,py-y)};
+  }
+
+  function getClosestMiniMapSegment(lat,lon){
+    let best=null;
+    for(let i=0;i<MINI_MAP_ROUTE_POINTS.length-1;i++){
+      const a=MINI_MAP_ROUTE_POINTS[i],b=MINI_MAP_ROUTE_POINTS[i+1];
+      const aa=latLonToLocalMeters(a.lat,a.lng,lat,lon);
+      const bb=latLonToLocalMeters(b.lat,b.lng,lat,lon);
+      const cp=closestPointOnSegmentLocal(0,0,aa.x,aa.y,bb.x,bb.y);
+      if(!best||cp.d<best.distance) best={index:i,distance:cp.d,a,b};
+    }
+    return best;
+  }
+
+  function initMiniMap(){
+    if(miniMapReady || !(window.kakao&&kakao.maps)) return;
+    const start=currentPos
+      ? new kakao.maps.LatLng(currentPos.latitude,currentPos.longitude)
+      : new kakao.maps.LatLng(MINI_MAP_ROUTE_POINTS[0].lat,MINI_MAP_ROUTE_POINTS[0].lng);
+
+    miniMap=new kakao.maps.Map(document.getElementById('miniMap'),{center:start,level:2});
+    miniMap.setDraggable(false);
+    miniMap.setZoomable(false);
+
+    new kakao.maps.Polyline({
+      map:miniMap,
+      path:MINI_MAP_ROUTE_POINTS.map(p=>new kakao.maps.LatLng(p.lat,p.lng)),
+      strokeWeight:7,strokeColor:'#2563eb',strokeOpacity:.92,strokeStyle:'solid'
+    });
+
+    miniMapReady=true;
+    miniMapSegmentBadge.textContent='경로 위치 확인 중';
+    requestAnimationFrame(()=>kakao.maps.event.trigger(miniMap,'resize'));
+  }
+
+  function ensureMiniMap(){
+    if(miniMapReady) return;
+    if(window.kakao&&kakao.maps&&kakao.maps.load) kakao.maps.load(initMiniMap);
+  }
+
+  function updateMiniMap(){
+    if(!currentPos) return;
+    ensureMiniMap();
+    if(!miniMapReady||!miniMap) return;
+
+    const lat=currentPos.latitude,lon=currentPos.longitude;
+    const here=new kakao.maps.LatLng(lat,lon);
+    miniMap.setCenter(here);
+    if(miniMap.getLevel()!==2) miniMap.setLevel(2,{anchor:here});
+
+    const seg=getClosestMiniMapSegment(lat,lon);
+    if(seg){
+      miniMapSegmentBadge.textContent=`구간 ${seg.a.seq}→${seg.b.seq} · 경로 ${Math.round(seg.distance)}m`;
+      if(seg.index!==miniMapLastSegment){
+        miniMapLastSegment=seg.index;
+        kakao.maps.event.trigger(miniMap,'resize');
+        miniMap.setCenter(here);
+      }
+    }
+
+    if(filteredHeading!=null){
+      const wanted=-filteredHeading;
+      const delta=norm180(wanted-miniMapHeadingDeg);
+      if(Math.abs(delta)>=.8) miniMapHeadingDeg+=delta*.14;
+      miniMapRotator.style.transform=`translate(-50%, -50%) rotate(${miniMapHeadingDeg.toFixed(2)}deg)`;
     }
   }
 
@@ -1830,6 +1975,8 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
       lastRouteLengthTs = null;
     });
   }
+
+  ensureMiniMap();
 
   // 권한 전에도 레이아웃 형태는 보이도록 초기 렌더.
   routeRibbon.setAttribute('d','');
