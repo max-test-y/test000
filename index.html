@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-<title>AR Navigation v8.2</title>
+<title>AR Navigation v8.3.3</title>
 <meta name="theme-color" content="#0b0d10">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
   crossorigin="">
@@ -207,26 +207,27 @@
   #edgeHint.right { right: 12px; }
 
   #sensorToast {
-    position: absolute;
-    left: 50%;
-    bottom: max(150px, calc(env(safe-area-inset-bottom) + 150px));
-    z-index: 20;
-    max-width: min(88vw, 420px);
-    padding: 12px 16px;
-    border-radius: 14px;
-    background: rgba(20,20,20,.88);
-    border: 1px solid rgba(255,255,255,.16);
-    color: #fff;
-    font-size: 13px;
-    font-weight: 700;
-    line-height: 1.45;
-    text-align: center;
-    box-shadow: 0 8px 28px rgba(0,0,0,.32);
-    backdrop-filter: blur(10px);
-    pointer-events: none;
-    opacity: 0;
-    transform: translate(-50%, 12px);
-    transition: opacity .22s ease, transform .22s ease;
+    position:absolute;
+    left:50%;
+    bottom:auto;
+    top:auto;
+    z-index:20;
+    max-width:min(88vw, 420px);
+    padding:12px 16px;
+    border-radius:14px;
+    background:rgba(20,20,20,.88);
+    border:1px solid rgba(255,255,255,.16);
+    color:#fff;
+    font-size:13px;
+    font-weight:700;
+    line-height:1.45;
+    text-align:center;
+    box-shadow:0 8px 28px rgba(0,0,0,.32);
+    backdrop-filter:blur(10px);
+    pointer-events:none;
+    opacity:0;
+    transform:translate(-50%, 12px);
+    transition:opacity .22s ease, transform .22s ease;
   }
 
   #sensorToast.show {
@@ -1183,6 +1184,11 @@
     background:rgba(255,255,255,.42);
     transform:translateY(-50%);
   }
+
+  #navCompass {
+    transform-origin:50% 50%;
+    will-change:transform;
+  }
 </style>
 </head>
 <body>
@@ -1215,7 +1221,7 @@
 
   <div id="topStatus">
     <div class="pill" id="gpsStatus">GPS 대기</div>
-    <div class="pill" id="versionLabel">v8.2</div>
+    <div class="pill" id="versionLabel">v8.3.3</div>
     <div class="pill" id="headingStatus">방향 대기</div>
   </div>
 
@@ -1427,9 +1433,11 @@
     chevronPool.push(el);
   }
 
+  const bottomHud = document.getElementById('bottomHud');
   const distValue = document.getElementById('distValue');
   const goalLabel = document.getElementById('goalLabel');
   const guideText = document.getElementById('guideText');
+  const navCompass = document.getElementById('navCompass');
   const edgeHint = document.getElementById('edgeHint');
   const sensorToast = document.getElementById('sensorToast');
 
@@ -1522,6 +1530,7 @@
   let filteredHeading = null;
   let visualDiff = 0;
   let desiredDiff = 0;
+  let navCompassAngle = 0;
   let alignedLock = false;
   let previousRawDiff = null;
 
@@ -1840,6 +1849,8 @@
     desiredDiff = 0;
     visualDiff = 0;
     targetBearing = null;
+    navCompassAngle = 0;
+    if(navCompass) navCompass.style.transform='rotate(0deg)';
     lastRouteLengthTs = null;
     markerScreenX = null;
     markerScreenY = null;
@@ -1925,7 +1936,22 @@
     }
   }
 
+  function positionSensorToast(){
+    if(!sensorToast || !bottomHud) return;
+
+    const hudRect = bottomHud.getBoundingClientRect();
+    const appRect = app.getBoundingClientRect();
+
+    // bottomHud 상단에서 정확히 10px 위에 토스트의 하단이 오도록 배치.
+    const toastBottomFromApp =
+      Math.max(0, appRect.bottom - hudRect.top + 10);
+
+    sensorToast.style.bottom = `${toastBottomFromApp}px`;
+    sensorToast.style.top = 'auto';
+  }
+
   function showNavigationToast(message, duration=2200){
+    positionSensorToast();
     lastToastMessage = message;
     sensorToast.classList.remove('countdown');
     sensorToast.textContent = message;
@@ -1961,6 +1987,7 @@
     let remaining = STEP_COUNTDOWN_SECONDS;
 
     const renderCountdown = ()=>{
+      positionSensorToast();
       sensorToast.classList.add('countdown');
       sensorToast.innerHTML =
         `<span class="countdown-number">${remaining}</span>` +
@@ -1996,6 +2023,7 @@
   }
 
   function showSensorToast(message, duration=4200){
+    positionSensorToast();
     const now = Date.now();
 
     // 같은 토스트가 이미 화면에 떠 있으면 다시 시작하지 않는다.
@@ -2476,6 +2504,35 @@
     for(;idx<chevronPool.length;idx++) chevronPool[idx].setAttribute('opacity','0');
   }
 
+  function updateNavCompass(){
+    if(!navCompass) return;
+
+    if(targetBearing == null || filteredHeading == null){
+      navCompass.style.transform='rotate(0deg)';
+      navCompassAngle = 0;
+      return;
+    }
+
+    const wanted = norm180(targetBearing-filteredHeading);
+    const delta = norm180(wanted-navCompassAngle);
+    const absDelta = Math.abs(delta);
+
+    // 작은 센서 떨림은 무시하고, 실제 회전은 자연스럽게 따라간다.
+    if(absDelta >= 0.8){
+      const alpha =
+        absDelta > 70 ? 0.28 :
+        absDelta > 35 ? 0.20 :
+        absDelta > 15 ? 0.14 :
+        absDelta > 6  ? 0.09 :
+                        0.055;
+
+      navCompassAngle = norm180(navCompassAngle + delta*alpha);
+    }
+
+    navCompass.style.transform =
+      `rotate(${navCompassAngle.toFixed(2)}deg)`;
+  }
+
   function renderRoute(ts){
     if(targetBearing != null && rawHeading != null){
       const rawDiff = norm180(targetBearing-rawHeading);
@@ -2520,6 +2577,8 @@
     if(alignedLock && Math.abs(visualDiff) < 1.2){
       visualDiff = 0;
     }
+
+    updateNavCompass();
 
     const routeLengthM = updateSmoothedRouteLength(ts);
     const route = buildRoute(visualDiff, routeLengthM);
@@ -3003,8 +3062,8 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
       map:miniMap,
       path:fullRoutePath,
       strokeWeight:7,
-      strokeColor:'#4338CA',
-      strokeOpacity:.38,
+      strokeColor:'#C8F3FF',
+      strokeOpacity:.62,
       strokeStyle:'solid',
       zIndex:1
     });
@@ -3013,9 +3072,9 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
     miniMapRemainingGlow=new kakao.maps.Polyline({
       map:miniMap,
       path:fullRoutePath,
-      strokeWeight:16,
+      strokeWeight:15,
       strokeColor:'#13A8FF',
-      strokeOpacity:.16,
+      strokeOpacity:.14,
       strokeStyle:'solid',
       zIndex:2
     });
@@ -3025,7 +3084,7 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
       map:miniMap,
       path:fullRoutePath,
       strokeWeight:8,
-      strokeColor:'#16B8FF',
+      strokeColor:'#1AAAFE',
       strokeOpacity:.96,
       strokeStyle:'solid',
       zIndex:3
@@ -3036,8 +3095,8 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
       map:miniMap,
       path:fullRoutePath,
       strokeWeight:3,
-      strokeColor:'#C8F3FF',
-      strokeOpacity:.92,
+      strokeColor:'#7DD8FF',
+      strokeOpacity:.58,
       strokeStyle:'solid',
       zIndex:4
     });
@@ -3071,6 +3130,7 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
   function setControlsVisible(visible){
     controlsVisible = !!visible;
     app.classList.toggle('controls-hidden', !controlsVisible);
+    requestAnimationFrame(positionSensorToast);
     controlsToggleBtn.setAttribute('aria-pressed', controlsVisible ? 'false' : 'true');
     controlsToggleBtn.setAttribute(
       'aria-label',
@@ -3085,6 +3145,7 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
   function setMiniMapVisible(visible){
     miniMapVisible = !!visible;
     app.classList.toggle('map-hidden', !miniMapVisible);
+    requestAnimationFrame(positionSensorToast);
 
     miniMapToggleBtn.setAttribute('aria-pressed', miniMapVisible ? 'false' : 'true');
     miniMapToggleBtn.setAttribute('aria-label', miniMapVisible ? '지도 숨기기' : '지도 보기');
@@ -3346,6 +3407,8 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
     lastSnapStrength = 0;
     targetBearing = null;
     targetDistance = null;
+    navCompassAngle = 0;
+    if(navCompass) navCompass.style.transform='rotate(0deg)';
     alignedLock = false;
     previousRawDiff = null;
     desiredDiff = 0;
@@ -3455,6 +3518,7 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
 
   window.addEventListener('resize',()=>{
     lastRouteLengthTs = null;
+    positionSensorToast();
     if(!rafId) renderRoute(performance.now());
   });
 
@@ -3475,6 +3539,7 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
   installMiniMapScreenDrag();
   setControlsVisible(true);
   setMiniMapVisible(true);
+  requestAnimationFrame(positionSensorToast);
   ensureMiniMap();
 
   // 권한 전에도 레이아웃 형태는 보이도록 초기 렌더.
