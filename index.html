@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-<title>AR Navigation v6.5</title>
+<title>AR Navigation v6.6</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
   crossorigin="">
 
@@ -408,6 +408,28 @@
     font-size:11px; font-weight:800; line-height:1;
   }
 
+  .mini-route-number {
+    width:28px;
+    height:28px;
+    border-radius:50%;
+    display:grid;
+    place-items:center;
+    background:#111827;
+    color:#fff;
+    border:3px solid #fff;
+    box-shadow:0 2px 8px rgba(0,0,0,.34);
+    font-size:12px;
+    font-weight:900;
+    line-height:1;
+    transform-origin:50% 50%;
+    will-change:transform;
+  }
+
+  .mini-route-number.active {
+    background:#2f8dff;
+    box-shadow:0 0 0 4px rgba(47,141,255,.22), 0 2px 8px rgba(0,0,0,.34);
+  }
+
   #miniMapControls {
     position:absolute;
     right:10px;
@@ -506,7 +528,7 @@
 
   <div id="topStatus">
     <div class="pill" id="gpsStatus">GPS 대기</div>
-    <div class="pill" id="versionLabel">v6.5</div>
+    <div class="pill" id="versionLabel">v6.6</div>
     <div class="pill" id="headingStatus">방향 대기</div>
   </div>
 
@@ -727,6 +749,10 @@
   let miniMapReady = false;
   let miniMapHeadingDeg = 0;
   let miniMapLastSegment = -1;
+  const miniMapNumberMarkers = [];
+
+  // 첫 유효 GPS에서 현재 경로 단계를 한 번만 자동 판정한다.
+  let initialStageResolved = false;
 
   let targetMap = null;
   let targetMapMarker = null;
@@ -1074,6 +1100,7 @@
     markerLastTs = null;
 
     updateTargetUi();
+    updateMiniMapActiveMarker();
     updateTargetFromGps();
   }
 
@@ -1752,6 +1779,7 @@
 
     debug.textContent =
 `목표: ${getActiveTarget().name} (${getActiveTarget().lat}, ${getActiveTarget().lon})
+초기 단계 자동판정: ${initialStageResolved ? '완료' : '대기'}
 현재: ${currentPos ? currentPos.latitude.toFixed(7)+', '+currentPos.longitude.toFixed(7) : '-'}
 거리: ${targetDistance != null ? targetDistance.toFixed(1)+' m' : '-'}
 유도선 길이: ${smoothedRouteLengthM.toFixed(1)} m
@@ -1806,7 +1834,13 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
         const gpsQuality = getGpsQuality(currentPos.accuracy);
         gpsStatus.textContent =
           `GPS ${gpsQuality.label} · ±${Math.round(currentPos.accuracy)}m${snapText}`;
-        updateTargetFromGps();
+
+        if(!initialStageResolved){
+          resolveInitialStageFromGps();
+        }else{
+          updateTargetFromGps();
+        }
+
         updateMiniMap();
       }else{
         const gpsQuality = getGpsQuality(pos.coords.accuracy);
@@ -1852,9 +1886,57 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
       const aa=latLonToLocalMeters(a.lat,a.lng,lat,lon);
       const bb=latLonToLocalMeters(b.lat,b.lng,lat,lon);
       const cp=closestPointOnSegmentLocal(0,0,aa.x,aa.y,bb.x,bb.y);
-      if(!best||cp.d<best.distance) best={index:i,distance:cp.d,a,b};
+
+      if(!best||cp.d<best.distance){
+        best={
+          index:i,
+          distance:cp.d,
+          t:cp.t,
+          a,b,
+          distanceToA:Math.hypot(aa.x,aa.y),
+          distanceToB:Math.hypot(bb.x,bb.y)
+        };
+      }
     }
     return best;
+  }
+
+  function detectInitialTargetIndex(lat,lon){
+    const seg=getClosestMiniMapSegment(lat,lon);
+    if(!seg) return 0;
+
+    // 시작점/각 안내점 바로 근처에서는 그 안내점을 현재 목표로 본다.
+    if(seg.distanceToA<=ARRIVAL_RADIUS_M+2) return seg.index;
+    if(seg.distanceToB<=ARRIVAL_RADIUS_M+2) return seg.index+1;
+
+    // 구간 초입 12%까지는 앞 번호를 유지하고,
+    // 그 이후에는 진행 중인 구간의 다음 안내점을 목표로 삼는다.
+    return seg.t<=0.12 ? seg.index : seg.index+1;
+  }
+
+  function resolveInitialStageFromGps(){
+    if(initialStageResolved || !currentPos) return;
+
+    const detected=clamp(
+      detectInitialTargetIndex(currentPos.latitude,currentPos.longitude),
+      0,
+      TARGETS.length-1
+    );
+
+    initialStageResolved=true;
+
+    if(detected!==targetIndex){
+      setTargetIndex(detected,'initial-gps');
+    }else{
+      updateTargetUi();
+      updateTargetFromGps();
+    }
+  }
+
+  function updateMiniMapActiveMarker(){
+    miniMapNumberMarkers.forEach((el,index)=>{
+      el.classList.toggle('active',index===targetIndex);
+    });
   }
 
   function initMiniMap(){
@@ -1873,6 +1955,24 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
       strokeWeight:7,strokeColor:'#2563eb',strokeOpacity:.92,strokeStyle:'solid'
     });
 
+    MINI_MAP_ROUTE_POINTS.forEach((p,index)=>{
+      const marker=document.createElement('div');
+      marker.className='mini-route-number';
+      marker.textContent=String(p.seq);
+
+      new kakao.maps.CustomOverlay({
+        map:miniMap,
+        position:new kakao.maps.LatLng(p.lat,p.lng),
+        content:marker,
+        xAnchor:.5,
+        yAnchor:.5,
+        zIndex:4
+      });
+
+      miniMapNumberMarkers.push(marker);
+    });
+
+    updateMiniMapActiveMarker();
     miniMapReady=true;
     miniMapSegmentBadge.textContent='경로 위치 확인 중';
     requestAnimationFrame(()=>kakao.maps.event.trigger(miniMap,'resize'));
@@ -1927,7 +2027,14 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
       const delta=norm180(wanted-miniMapHeadingDeg);
       if(Math.abs(delta)>=.8) miniMapHeadingDeg+=delta*.14;
       miniMapRotator.style.transform=`translate(-50%, -50%) rotate(${miniMapHeadingDeg.toFixed(2)}deg)`;
+
+      // 지도는 회전하지만 숫자는 항상 정방향으로 읽히게 역회전.
+      miniMapNumberMarkers.forEach(el=>{
+        el.style.transform=`rotate(${-miniMapHeadingDeg.toFixed(2)}deg)`;
+      });
     }
+
+    updateMiniMapActiveMarker();
   }
 
   function setPendingTarget(lat, lon, moveMap=false){
