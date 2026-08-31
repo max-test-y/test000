@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-<title>AR Navigation v7.2</title>
+<title>AR Navigation v7.3</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
   crossorigin="">
 
@@ -542,6 +542,8 @@
   }
 
   #miniMapShell.fullscreen #miniMapRotator {
+    width:100% !important;
+    height:100% !important;
     min-width:0;
     min-height:0;
   }
@@ -586,7 +588,7 @@
 
   <div id="topStatus">
     <div class="pill" id="gpsStatus">GPS 대기</div>
-    <div class="pill" id="versionLabel">v7.2</div>
+    <div class="pill" id="versionLabel">v7.3</div>
     <div class="pill" id="headingStatus">방향 대기</div>
   </div>
 
@@ -826,6 +828,9 @@
   let miniMapDragPointerId = null;
   let miniMapDragLastX = 0;
   let miniMapDragLastY = 0;
+
+  // 전체화면에서 회전된 지도가 모서리를 덮기 위한 시각적 확대율.
+  const MINI_MAP_FULLSCREEN_SCALE = 1.48;
 
   // 첫 유효 GPS에서 현재 경로 단계를 한 번만 자동 판정한다.
   let initialStageResolved = false;
@@ -2015,16 +2020,25 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
     });
   }
 
+  function getMiniMapVisualScale(){
+    return miniMapShell.classList.contains('fullscreen')
+      ? MINI_MAP_FULLSCREEN_SCALE
+      : 1;
+  }
+
   function rotateScreenDeltaToMapLocal(dx,dy){
-    // miniMapRotator가 화면에서 miniMapHeadingDeg 만큼 회전된 상태이므로,
-    // 화면 드래그 벡터를 지도 로컬 좌표계로 역회전한다.
+    // 화면에서 보이는 드래그 벡터를 지도 로컬 좌표계로 역회전한다.
+    // 전체화면에서는 지도 레이어가 scale 되어 있으므로 픽셀 이동량도 역보정.
+    const scale = getMiniMapVisualScale();
+    const sx = dx/scale;
+    const sy = dy/scale;
     const rad = -miniMapHeadingDeg*Math.PI/180;
     const cos = Math.cos(rad);
     const sin = Math.sin(rad);
 
     return {
-      x: dx*cos - dy*sin,
-      y: dx*sin + dy*cos
+      x: sx*cos - sy*sin,
+      y: sx*sin + sy*cos
     };
   }
 
@@ -2063,12 +2077,24 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
 
     const local = rotateScreenDeltaToMapLocal(dx,dy);
 
-    // Kakao panBy는 중심점을 픽셀 방향으로 이동시키므로,
-    // 지도 콘텐츠가 손가락을 따라오게 하려면 반대 부호를 사용한다.
-    miniMap.panBy(-local.x,-local.y);
+    // panBy는 애니메이션 이동이라 연속 pointermove에서 이동량이 누락될 수 있다.
+    // 현재 지도 투영좌표에서 "화면 픽셀만큼 이동한 새 중심 좌표"를 직접 계산해
+    // setCenter()로 즉시 반영한다.
+    const projection = miniMap.getProjection();
+    const center = miniMap.getCenter();
+    const centerPoint = projection.containerPointFromCoords(center);
 
-    // 현재 위치 마커는 실제 GPS 좌표의 CustomOverlay이므로
-    // 지도와 함께 해당 좌표 위치로 이동한다.
+    const nextCenter = projection.coordsFromContainerPoint(
+      new kakao.maps.Point(
+        centerPoint.x - local.x,
+        centerPoint.y - local.y
+      )
+    );
+
+    miniMap.setCenter(nextCenter);
+
+    // 현재 위치 마커는 실제 GPS 좌표의 CustomOverlay라
+    // 지도 중심이 이동하면 그 좌표에 맞춰 함께 화면상 위치가 변한다.
     updateMiniMapUserOverlay();
 
     e.preventDefault();
@@ -2175,6 +2201,7 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
     updateMiniMapActiveMarker();
     miniMapReady=true;
     ensureMiniMapUserOverlay();
+    updateMiniMapTransform();
     miniMapSegmentBadge.textContent='경로 위치 확인 중';
     requestAnimationFrame(()=>kakao.maps.event.trigger(miniMap,'resize'));
   }
@@ -2223,9 +2250,10 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
       miniMapShell.style.width = `${w}px`;
       miniMapShell.style.height = `${h}px`;
 
-      const side = Math.ceil(Math.hypot(w,h)*1.12);
-      miniMapRotator.style.width = `${side}px`;
-      miniMapRotator.style.height = `${side}px`;
+      // 실제 Kakao map 컨테이너는 viewport와 같은 크기를 유지한다.
+      // 회전시 모서리 빈 공간은 transform scale로만 보충한다.
+      miniMapRotator.style.width = '100%';
+      miniMapRotator.style.height = '100%';
     }else{
       miniMapShell.style.left = '';
       miniMapShell.style.top = '';
@@ -2242,15 +2270,17 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
     sizeMiniMapForCurrentMode();
     if(!miniMapReady || !miniMap) return;
 
-    const center = currentPos
-      ? new kakao.maps.LatLng(currentPos.latitude,currentPos.longitude)
-      : miniMap.getCenter();
+    const center = miniMap.getCenter();
 
     const refresh = ()=>{
       sizeMiniMapForCurrentMode();
-      kakao.maps.event.trigger(miniMap,'resize');
+
+      // Kakao 공식 API: 지도 컨테이너 크기 변경 후 반드시 relayout().
+      miniMap.relayout();
+
       if(center) miniMap.setCenter(center);
       updateMiniMapUserOverlay();
+      updateMiniMapTransform();
     };
 
     requestAnimationFrame(()=>{
@@ -2265,6 +2295,7 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
     miniMapShell.classList.toggle('fullscreen', enabled);
     document.body.style.overflow = enabled ? 'hidden' : '';
     sizeMiniMapForCurrentMode();
+    updateMiniMapTransform();
 
     requestAnimationFrame(()=>{
       refreshMiniMapLayout();
@@ -2274,6 +2305,26 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
   function ensureMiniMap(){
     if(miniMapReady) return;
     if(window.kakao&&kakao.maps&&kakao.maps.load) kakao.maps.load(initMiniMap);
+  }
+
+  function updateMiniMapTransform(){
+    const scale = getMiniMapVisualScale();
+
+    miniMapRotator.style.transform =
+      `translate(-50%, -50%) rotate(${miniMapHeadingDeg.toFixed(2)}deg) scale(${scale})`;
+
+    // 숫자 마커와 현재 위치 마커는 화면상 크기가 커지지 않도록 역회전/역스케일.
+    const inverseScale = 1/scale;
+
+    miniMapNumberMarkers.forEach(el=>{
+      el.style.transform =
+        `rotate(${-miniMapHeadingDeg.toFixed(2)}deg) scale(${inverseScale})`;
+    });
+
+    if(miniMapUserMarkerEl){
+      miniMapUserMarkerEl.style.transform =
+        `rotate(${-miniMapHeadingDeg.toFixed(2)}deg) scale(${inverseScale})`;
+    }
   }
 
   function updateMiniMap(){
@@ -2297,7 +2348,7 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
       miniMapSegmentBadge.textContent=`구간 ${seg.a.seq}→${seg.b.seq} · 경로 ${Math.round(seg.distance)}m`;
       if(seg.index!==miniMapLastSegment){
         miniMapLastSegment=seg.index;
-        kakao.maps.event.trigger(miniMap,'resize');
+        miniMap.relayout();
 
         if(!miniMapUserInteracting && Date.now() >= miniMapFollowResumeAt){
           miniMap.setCenter(here);
@@ -2309,12 +2360,7 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
       const wanted=-filteredHeading;
       const delta=norm180(wanted-miniMapHeadingDeg);
       if(Math.abs(delta)>=.8) miniMapHeadingDeg+=delta*.14;
-      miniMapRotator.style.transform=`translate(-50%, -50%) rotate(${miniMapHeadingDeg.toFixed(2)}deg)`;
-
-      // 지도는 회전하지만 숫자는 항상 정방향으로 읽히게 역회전.
-      miniMapNumberMarkers.forEach(el=>{
-        el.style.transform=`rotate(${-miniMapHeadingDeg.toFixed(2)}deg)`;
-      });
+      updateMiniMapTransform();
     }
 
     updateMiniMapActiveMarker();
