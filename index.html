@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-<title>AR Navigation v8.3.3</title>
+<title>AR Navigation v8.3.4</title>
 <meta name="theme-color" content="#0b0d10">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
   crossorigin="">
@@ -431,14 +431,7 @@
     72%{transform:scale(1.65);opacity:0}
     100%{transform:scale(1.65);opacity:0}
   }
-  #miniMapSegmentBadge {
-    position:absolute; left:10px; top:9px; z-index:10; padding:5px 8px;
-    border-radius:999px; color:#fff; background:rgba(18,18,18,.62);
-    border:1px solid rgba(255,255,255,.18); backdrop-filter:blur(8px);
-    font-size:11px; font-weight:800; line-height:1;
-  }
-
-  .mini-route-number {
+.mini-route-number {
     width:22px;
     height:22px;
     border-radius:50%;
@@ -748,25 +741,7 @@
     box-shadow: 0 -12px 34px rgba(0,0,0,.30);
     background: #e8edf2;
   }
-
-  #miniMapSegmentBadge {
-    left: 12px;
-    top: 11px;
-    min-height: 34px;
-    display: flex;
-    align-items: center;
-    padding: 0 11px;
-    border-radius: 12px;
-    background: rgba(18,21,26,.78);
-    border: 1px solid rgba(255,255,255,.20);
-    box-shadow: 0 5px 16px rgba(0,0,0,.18);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    font-size: 11px;
-    font-weight: 800;
-  }
-
-  #miniMapControls {
+#miniMapControls {
     top: 10px;
     right: 10px;
     gap: 5px;
@@ -924,11 +899,8 @@
     right: 10px;
   }
 
-  #miniMapShell.fullscreen #miniMapSegmentBadge {
-    top: max(11px, calc(env(safe-area-inset-top) + 9px));
-  }
-
-  #app.map-hidden #miniMapToggleBtn {
+  #miniMapShell.fullscreen
+#app.map-hidden #miniMapToggleBtn {
     bottom: max(12px, calc(env(safe-area-inset-bottom) + 8px));
   }
 
@@ -1221,7 +1193,7 @@
 
   <div id="topStatus">
     <div class="pill" id="gpsStatus">GPS 대기</div>
-    <div class="pill" id="versionLabel">v8.3.3</div>
+    <div class="pill" id="versionLabel">v8.3.4</div>
     <div class="pill" id="headingStatus">방향 대기</div>
   </div>
 
@@ -1265,8 +1237,7 @@
 <div id="miniMapShell" aria-label="현재 위치 2D 지도">
     <div id="miniMapRotator"><div id="miniMap"></div></div>
     <div id="miniMapDragLayer" aria-hidden="true"></div>
-    <div id="miniMapSegmentBadge">지도 준비 중</div>
-    <div id="miniMapControls">
+<div id="miniMapControls">
       <button id="miniMapZoomOutBtn" type="button" aria-label="지도 축소">−</button>
       <button id="miniMapZoomInBtn" type="button" aria-label="지도 확대">+</button>
       <button id="miniMapFullscreenBtn" type="button" aria-label="지도 전체화면">⛶</button>
@@ -1459,7 +1430,7 @@
   const controlsToggleBtn = document.getElementById('controlsToggleBtn');
   const miniMapRotator = document.getElementById('miniMapRotator');
   const miniMapDragLayer = document.getElementById('miniMapDragLayer');
-  const miniMapSegmentBadge = document.getElementById('miniMapSegmentBadge');
+
   const miniMapZoomOutBtn = document.getElementById('miniMapZoomOutBtn');
   const miniMapZoomInBtn = document.getElementById('miniMapZoomInBtn');
   const miniMapFullscreenBtn = document.getElementById('miniMapFullscreenBtn');
@@ -3062,9 +3033,9 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
       map:miniMap,
       path:fullRoutePath,
       strokeWeight:7,
-      strokeColor:'#C8F3FF',
-      strokeOpacity:.62,
-      strokeStyle:'solid',
+      strokeColor:'#13A8FF',
+      strokeOpacity:.72,
+      strokeStyle:'shortdash',
       zIndex:1
     });
 
@@ -3123,7 +3094,7 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
     ensureMiniMapUserOverlay();
     updateMiniMapRouteProgress();
     updateMiniMapTransform();
-    miniMapSegmentBadge.textContent='경로 위치 확인 중';
+
     requestAnimationFrame(()=>kakao.maps.event.trigger(miniMap,'resize'));
   }
 
@@ -3289,7 +3260,7 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
 
     const seg=getClosestMiniMapSegment(lat,lon);
     if(seg){
-      miniMapSegmentBadge.textContent=`구간 ${seg.a.seq}→${seg.b.seq} · 경로 ${Math.round(seg.distance)}m`;
+
       if(seg.index!==miniMapLastSegment){
         miniMapLastSegment=seg.index;
         miniMap.relayout();
