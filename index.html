@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-<title>AR Navigation v6.9</title>
+<title>AR Navigation v7.1</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
   crossorigin="">
 
@@ -381,53 +381,29 @@
     transform-origin:50% 50%; will-change:transform;
   }
   #miniMap { position:absolute; inset:0; width:100%; height:100%; background:#dfe6ec; pointer-events:auto; touch-action:none; }
-  #miniMapFixedHud {
-    position:absolute;
-    inset:0;
-    z-index:20;
-    pointer-events:none;
-    transform:none !important;
-    contain:layout style;
-  }
-
-  #miniMapUserMarker {
-    position:absolute;
-    left:50%;
-    top:50%;
+  #miniMapShell { touch-action:none; }
+  .mini-map-user-marker {
+    position:relative;
     width:18px;
     height:18px;
-    margin-left:-9px;
-    margin-top:-9px;
     border-radius:50%;
     background:#1677ff;
     border:3px solid #fff;
     box-shadow:0 2px 10px rgba(0,0,0,.35);
-    z-index:21;
-    transform:none !important;
-    will-change:auto;
     pointer-events:none;
   }
-  #miniMapUserMarker::before {
-    content:""; position:absolute; inset:-7px; border:2px solid rgba(22,119,255,.58);
-    border-radius:50%; animation:miniMapPulse 1.45s ease-out infinite;
+  .mini-map-user-marker::before {
+    content:"";
+    position:absolute;
+    inset:-7px;
+    border:2px solid rgba(22,119,255,.58);
+    border-radius:50%;
+    animation:miniMapPulse 1.45s ease-out infinite;
   }
   @keyframes miniMapPulse {
     0%{transform:scale(.65);opacity:.88}
     72%{transform:scale(1.65);opacity:0}
     100%{transform:scale(1.65);opacity:0}
-  }
-  #miniMapHeading {
-    position:absolute;
-    left:50%;
-    top:calc(50% - 25px);
-    z-index:22;
-    width:0;
-    height:0;
-    transform:translateX(-50%) !important;
-    border-left:7px solid transparent;
-    border-right:7px solid transparent;
-    border-bottom:18px solid #0b3f9e;
-    pointer-events:none;
   }
   #miniMapSegmentBadge {
     position:absolute; left:10px; top:9px; z-index:10; padding:5px 8px;
@@ -601,7 +577,7 @@
 
   <div id="topStatus">
     <div class="pill" id="gpsStatus">GPS 대기</div>
-    <div class="pill" id="versionLabel">v6.9</div>
+    <div class="pill" id="versionLabel">v7.1</div>
     <div class="pill" id="headingStatus">방향 대기</div>
   </div>
 
@@ -626,10 +602,6 @@
 
   <div id="miniMapShell" aria-label="현재 위치 2D 지도">
     <div id="miniMapRotator"><div id="miniMap"></div></div>
-    <div id="miniMapFixedHud">
-      <div id="miniMapUserMarker"></div>
-      <div id="miniMapHeading"></div>
-    </div>
     <div id="miniMapSegmentBadge">지도 준비 중</div>
     <div id="miniMapControls">
       <button id="miniMapZoomOutBtn" type="button" aria-label="지도 축소">−</button>
@@ -817,9 +789,6 @@
   const targetCoordText = document.getElementById('targetCoordText');
   const miniMapShell = document.getElementById('miniMapShell');
   const miniMapToggleBtn = document.getElementById('miniMapToggleBtn');
-  const miniMapFixedHud = document.getElementById('miniMapFixedHud');
-  const miniMapUserMarker = document.getElementById('miniMapUserMarker');
-  const miniMapHeading = document.getElementById('miniMapHeading');
   const miniMapRotator = document.getElementById('miniMapRotator');
   const miniMapSegmentBadge = document.getElementById('miniMapSegmentBadge');
   const miniMapZoomOutBtn = document.getElementById('miniMapZoomOutBtn');
@@ -830,6 +799,8 @@
   let miniMap = null;
   let miniMapReady = false;
   let miniMapVisible = true;
+  let miniMapUserOverlay = null;
+  let miniMapUserMarkerEl = null;
   let miniMapHeadingDeg = 0;
   let miniMapLastSegment = -1;
   const miniMapNumberMarkers = [];
@@ -838,6 +809,12 @@
   let miniMapUserInteracting = false;
   let miniMapFollowResumeAt = 0;
   const MINI_MAP_FOLLOW_RESUME_MS = 4500;
+
+  // 회전된 지도에서도 화면에 보이는 방향 그대로 드래그하기 위한 상태.
+  let miniMapDragActive = false;
+  let miniMapDragPointerId = null;
+  let miniMapDragLastX = 0;
+  let miniMapDragLastY = 0;
 
   // 첫 유효 GPS에서 현재 경로 단계를 한 번만 자동 판정한다.
   let initialStageResolved = false;
@@ -2027,6 +2004,128 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
     });
   }
 
+  function rotateScreenDeltaToMapLocal(dx,dy){
+    // miniMapRotator가 화면에서 miniMapHeadingDeg 만큼 회전된 상태이므로,
+    // 화면 드래그 벡터를 지도 로컬 좌표계로 역회전한다.
+    const rad = -miniMapHeadingDeg*Math.PI/180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+
+    return {
+      x: dx*cos - dy*sin,
+      y: dx*sin + dy*cos
+    };
+  }
+
+  function beginMiniMapDrag(e){
+    if(!miniMapReady || !miniMap) return;
+    if(e.button != null && e.button !== 0) return;
+
+    miniMapDragActive = true;
+    miniMapDragPointerId = e.pointerId;
+    miniMapDragLastX = e.clientX;
+    miniMapDragLastY = e.clientY;
+
+    miniMapUserInteracting = true;
+    miniMapFollowResumeAt = Infinity;
+
+
+    if(miniMapShell.setPointerCapture && e.pointerId != null){
+      try{ miniMapShell.setPointerCapture(e.pointerId); }catch(_){}
+    }
+
+    e.preventDefault();
+  }
+
+  function moveMiniMapDrag(e){
+    if(!miniMapDragActive) return;
+    if(miniMapDragPointerId != null && e.pointerId !== miniMapDragPointerId) return;
+    if(!miniMapReady || !miniMap) return;
+
+    const dx = e.clientX-miniMapDragLastX;
+    const dy = e.clientY-miniMapDragLastY;
+
+    miniMapDragLastX = e.clientX;
+    miniMapDragLastY = e.clientY;
+
+    if(Math.abs(dx)<0.2 && Math.abs(dy)<0.2) return;
+
+    const local = rotateScreenDeltaToMapLocal(dx,dy);
+
+    // panBy는 지도 로컬 픽셀 기준으로 동작한다.
+    // 손가락을 오른쪽/아래로 끌었을 때 지도 콘텐츠도 화면에서 같은 방향으로
+    // 따라오도록 입력 벡터를 그대로 전달한다.
+    miniMap.panBy(local.x,local.y);
+
+    // 현재 위치 마커/방향 화살표는 지도 DOM 바깥의 고정 HUD이므로
+    // 드래그 중에도 항상 화면 중앙에 유지한다.
+
+    e.preventDefault();
+  }
+
+  function endMiniMapDrag(e){
+    if(!miniMapDragActive) return;
+    if(
+      miniMapDragPointerId != null &&
+      e.pointerId != null &&
+      e.pointerId !== miniMapDragPointerId
+    ) return;
+
+    miniMapDragActive = false;
+    miniMapDragPointerId = null;
+    miniMapUserInteracting = false;
+    miniMapFollowResumeAt = Date.now()+MINI_MAP_FOLLOW_RESUME_MS;
+
+
+    if(miniMapShell.releasePointerCapture && e.pointerId != null){
+      try{ miniMapShell.releasePointerCapture(e.pointerId); }catch(_){}
+    }
+
+    e.preventDefault();
+  }
+
+  function installMiniMapScreenDrag(){
+    miniMapShell.addEventListener('pointerdown',e=>{
+      // 지도 컨트롤 버튼은 일반 클릭 동작을 유지한다.
+      if(e.target.closest && e.target.closest('#miniMapControls')) return;
+      beginMiniMapDrag(e);
+    },{passive:false});
+
+    miniMapShell.addEventListener('pointermove',moveMiniMapDrag,{passive:false});
+    miniMapShell.addEventListener('pointerup',endMiniMapDrag,{passive:false});
+    miniMapShell.addEventListener('pointercancel',endMiniMapDrag,{passive:false});
+  }
+
+  function ensureMiniMapUserOverlay(){
+    if(!miniMapReady || !miniMap || miniMapUserOverlay) return;
+
+    miniMapUserMarkerEl=document.createElement('div');
+    miniMapUserMarkerEl.className='mini-map-user-marker';
+
+    const initial=currentPos
+      ? new kakao.maps.LatLng(currentPos.latitude,currentPos.longitude)
+      : new kakao.maps.LatLng(MINI_MAP_ROUTE_POINTS[0].lat,MINI_MAP_ROUTE_POINTS[0].lng);
+
+    miniMapUserOverlay=new kakao.maps.CustomOverlay({
+      map:miniMap,
+      position:initial,
+      content:miniMapUserMarkerEl,
+      xAnchor:.5,
+      yAnchor:.5,
+      zIndex:8
+    });
+  }
+
+  function updateMiniMapUserOverlay(){
+    if(!miniMapReady || !miniMap || !currentPos) return;
+    ensureMiniMapUserOverlay();
+    if(!miniMapUserOverlay) return;
+
+    miniMapUserOverlay.setPosition(
+      new kakao.maps.LatLng(currentPos.latitude,currentPos.longitude)
+    );
+  }
+
   function initMiniMap(){
     if(miniMapReady || !(window.kakao&&kakao.maps)) return;
     const start=currentPos
@@ -2034,20 +2133,11 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
       : new kakao.maps.LatLng(MINI_MAP_ROUTE_POINTS[0].lat,MINI_MAP_ROUTE_POINTS[0].lng);
 
     miniMap=new kakao.maps.Map(document.getElementById('miniMap'),{center:start,level:2});
-    miniMap.setDraggable(true);
+    // CSS로 지도 전체를 heading에 맞춰 회전시키기 때문에
+    // 카카오 기본 drag를 쓰면 입력 방향까지 지도 좌표계에 종속된다.
+    // 기본 drag는 끄고 아래의 화면좌표 기반 custom drag를 사용한다.
+    miniMap.setDraggable(false);
     miniMap.setZoomable(true);
-
-    kakao.maps.event.addListener(miniMap,'dragstart',()=>{
-      miniMapUserInteracting = true;
-      miniMapFollowResumeAt = Infinity;
-      lockMiniMapHud();
-    });
-
-    kakao.maps.event.addListener(miniMap,'dragend',()=>{
-      miniMapUserInteracting = false;
-      miniMapFollowResumeAt = Date.now() + MINI_MAP_FOLLOW_RESUME_MS;
-      lockMiniMapHud();
-    });
 
     kakao.maps.event.addListener(miniMap,'zoom_changed',()=>{
       miniMapFollowResumeAt = Date.now() + MINI_MAP_FOLLOW_RESUME_MS;
@@ -2077,22 +2167,10 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
     });
 
     updateMiniMapActiveMarker();
-    lockMiniMapHud();
     miniMapReady=true;
+    ensureMiniMapUserOverlay();
     miniMapSegmentBadge.textContent='경로 위치 확인 중';
     requestAnimationFrame(()=>kakao.maps.event.trigger(miniMap,'resize'));
-  }
-
-  function lockMiniMapHud(){
-    // 지도 이동/회전/줌과 무관하게 HUD는 항상 패널 중앙 고정.
-    miniMapFixedHud.style.transform = 'none';
-    miniMapUserMarker.style.left = '50%';
-    miniMapUserMarker.style.top = '50%';
-    miniMapUserMarker.style.transform = 'none';
-
-    miniMapHeading.style.left = '50%';
-    miniMapHeading.style.top = 'calc(50% - 25px)';
-    miniMapHeading.style.transform = 'translateX(-50%)';
   }
 
   function setMiniMapVisible(visible){
@@ -2105,7 +2183,6 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
     if(miniMapVisible){
       requestAnimationFrame(()=>{
         refreshMiniMapLayout();
-        lockMiniMapHud();
       });
     }
   }
@@ -2129,7 +2206,6 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
     const refresh = ()=>{
       kakao.maps.event.trigger(miniMap,'resize');
       recenterMiniMap(true);
-      lockMiniMapHud();
     };
 
     requestAnimationFrame(()=>{
@@ -2161,6 +2237,9 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
 
     const lat=currentPos.latitude,lon=currentPos.longitude;
     const here=new kakao.maps.LatLng(lat,lon);
+
+    // 실제 GPS 좌표에 붙는 지도 오버레이: 드래그 시 해당 지도 좌표와 함께 이동.
+    updateMiniMapUserOverlay();
 
     if(!miniMapUserInteracting && Date.now() >= miniMapFollowResumeAt){
       miniMap.setCenter(here);
@@ -2383,6 +2462,7 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
     });
   }
 
+  installMiniMapScreenDrag();
   setMiniMapVisible(true);
   ensureMiniMap();
 
