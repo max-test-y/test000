@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-<title>AR Navigation v7.5.1</title>
+<title>AR Navigation v7.6</title>
 <meta name="theme-color" content="#0b0d10">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
   crossorigin="">
@@ -144,36 +144,55 @@
 
   /* 하단 HUD: 거리 */
   #bottomHud {
-    position: absolute;
-    z-index: 9;
-    left: 50%;
-    transform: translateX(-50%);
-    bottom: max(96px, calc(env(safe-area-inset-bottom) + 96px));
-    display: flex;
-    align-items: flex-end;
-    pointer-events: none;
-    text-shadow: 0 2px 6px rgba(0,0,0,.55);
+    position:absolute;
+    left:50%;
+    bottom:calc(max(96px, calc(env(safe-area-inset-bottom) + 96px)) + min(20dvh, 220px));
+    transform:translateX(-50%);
+    width:min(91vw, 420px);
+    min-height:72px;
+    padding:11px 56px 11px 14px;
+    border-radius:20px;
+    background:linear-gradient(180deg, rgba(18,22,29,.72), rgba(10,13,18,.64));
+    border:1px solid rgba(255,255,255,.12);
+    box-shadow:0 10px 28px rgba(0,0,0,.20), inset 0 1px 0 rgba(255,255,255,.06);
+    backdrop-filter:blur(18px) saturate(1.06);
+    -webkit-backdrop-filter:blur(18px) saturate(1.06);
+    z-index:15;
+    display:flex;
+    align-items:center;
+    gap:11px;
+    color:#fff;
   }
-  #distBlock { display: flex; flex-direction: column; align-items: center; gap: 4px; }
-  #distPin {
-    width: 22px;
-    height: 26px;
+
+  #distBlock {
+    display:grid;
+    grid-template-columns:auto 1fr;
+    grid-template-rows:auto auto;
+    column-gap:9px;
+    row-gap:2px;
+    align-items:center;
+    min-width:0;
+    flex:1;
   }
   #goalLabel {
-    color: #fff;
-    font-size: 13px;
-    font-weight: 800;
-    padding: 5px 9px;
-    border-radius: 999px;
-    background: rgba(0,0,0,.42);
-    border: 1px solid rgba(255,255,255,.14);
-    backdrop-filter: blur(8px);
+    grid-column:2;
+    grid-row:1;
+    font-size:11px;
+    font-weight:700;
+    letter-spacing:.02em;
+    color:rgba(255,255,255,.58);
+    line-height:1.2;
   }
 
   #distValue {
-    color: #ffb04d;
-    font-size: 15px;
-    font-weight: 800;
+    grid-column:2;
+    grid-row:2;
+    font-size:28px;
+    font-weight:780;
+    letter-spacing:-.045em;
+    line-height:1;
+    color:#fff;
+    white-space:nowrap;
   }
 
   #edgeHint {
@@ -724,9 +743,13 @@
   }
 
   #distPin {
-    width: 16px;
-    height: 19px;
-    filter: drop-shadow(0 2px 4px rgba(0,0,0,.18));
+    grid-column:1;
+    grid-row:1 / span 2;
+    width:22px;
+    height:26px;
+    flex:none;
+    opacity:.9;
+    filter:drop-shadow(0 2px 4px rgba(0,0,0,.16));
   }
 
   #distValue {
@@ -1031,23 +1054,23 @@
 
   .hud-icon-btn {
     position:absolute;
-    right:12px;
+    right:10px;
     top:50%;
     transform:translateY(-50%);
-    width:42px;
-    height:42px;
-    min-width:42px;
-    min-height:42px;
+    width:38px;
+    height:38px;
+    min-width:38px;
+    min-height:38px;
     padding:0;
-    border-radius:14px;
-    border:1px solid rgba(255,255,255,.18);
-    background:rgba(16,20,28,.66);
-    color:#fff;
+    border-radius:12px;
+    border:1px solid rgba(255,255,255,.10);
+    background:rgba(255,255,255,.075);
+    color:rgba(255,255,255,.92);
     display:grid;
     place-items:center;
-    backdrop-filter:blur(12px);
-    -webkit-backdrop-filter:blur(12px);
-    box-shadow:0 4px 18px rgba(0,0,0,.18);
+    backdrop-filter:blur(10px);
+    -webkit-backdrop-filter:blur(10px);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.05);
     z-index:4;
   }
   .hud-icon-btn svg {
@@ -1099,6 +1122,19 @@
   #app.controls-hidden #controlsToggleBtn svg {
     transform:rotate(180deg);
   }
+
+  #app.controls-hidden #bottomHud {
+    bottom:calc(max(18px, env(safe-area-inset-bottom)) + min(20dvh, 220px));
+  }
+
+  #app.controls-hidden.map-hidden #bottomHud {
+    bottom:max(18px, env(safe-area-inset-bottom));
+  }
+
+  .hud-icon-btn:active {
+    transform:translateY(-50%) scale(.96);
+    background:rgba(255,255,255,.12);
+  }
 </style>
 </head>
 <body>
@@ -1109,9 +1145,9 @@
   <svg id="routeSvg" aria-hidden="true">
     <defs>
       <linearGradient id="routeFill" x1="0%" y1="0%" x2="100%" y2="0%">
-        <stop offset="0%"  stop-color="#8fd8ff" stop-opacity=".95"></stop>
-        <stop offset="46%" stop-color="#2f8dff" stop-opacity=".95"></stop>
-        <stop offset="100%" stop-color="#0b3f9e" stop-opacity=".95"></stop>
+        <stop offset="0%"  stop-color="#8fd8ff" stop-opacity=".52"></stop>
+        <stop offset="46%" stop-color="#2f8dff" stop-opacity=".56"></stop>
+        <stop offset="100%" stop-color="#0b3f9e" stop-opacity=".60"></stop>
       </linearGradient>
       <linearGradient id="chevronStroke" x1="0" y1="1" x2="0" y2="0">
         <stop offset="0%" stop-color="#eaf6ff" stop-opacity=".95"></stop>
@@ -1131,7 +1167,7 @@
 
   <div id="topStatus">
     <div class="pill" id="gpsStatus">GPS 대기</div>
-    <div class="pill" id="versionLabel">v7.5.1</div>
+    <div class="pill" id="versionLabel">v7.6</div>
     <div class="pill" id="headingStatus">방향 대기</div>
   </div>
 
