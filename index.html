@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-<title>AR Navigation v7.4</title>
+<title>AR Navigation v7.5.1</title>
 <meta name="theme-color" content="#0b0d10">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
   crossorigin="">
@@ -403,6 +403,8 @@
     border:3px solid #fff;
     box-shadow:0 2px 10px rgba(0,0,0,.35);
     pointer-events:none;
+    transform-origin:50% 50%;
+    overflow:visible;
   }
   .mini-map-user-marker::before {
     content:"";
@@ -412,6 +414,38 @@
     border-radius:50%;
     animation:miniMapPulse 1.45s ease-out infinite;
   }
+  .mini-map-user-marker::after {
+    content:"";
+    position:absolute;
+    left:50%;
+    bottom:50%;
+    width:72px;
+    height:40px;
+    transform:translateX(-50%);
+    transform-origin:50% 100%;
+    border-radius:72px 72px 0 0;
+    background:
+      radial-gradient(
+        ellipse at 50% 100%,
+        rgba(22,119,255,.34) 0%,
+        rgba(22,119,255,.24) 34%,
+        rgba(22,119,255,.12) 58%,
+        rgba(22,119,255,.035) 78%,
+        rgba(22,119,255,0) 100%
+      );
+    filter:blur(.2px);
+    pointer-events:none;
+    z-index:-1;
+  }
+  .mini-map-user-marker {
+    --marker-counter-rotation: 0deg;
+  }
+  .mini-map-user-marker::after {
+    transform:
+      translateX(-50%)
+      rotate(var(--marker-counter-rotation));
+  }
+
   @keyframes miniMapPulse {
     0%{transform:scale(.65);opacity:.88}
     72%{transform:scale(1.65);opacity:0}
@@ -425,15 +459,15 @@
   }
 
   .mini-route-number {
-    width:28px;
-    height:28px;
+    width:22px;
+    height:22px;
     border-radius:50%;
     display:grid;
     place-items:center;
     background:#111827;
     color:#fff;
-    border:3px solid #fff;
-    box-shadow:0 2px 8px rgba(0,0,0,.34);
+    border:2px solid #fff;
+    box-shadow:0 2px 7px rgba(0,0,0,.32);
     font-size:12px;
     font-weight:900;
     line-height:1;
@@ -456,31 +490,11 @@
     pointer-events:auto;
   }
 
-  #miniMapToggleBtn {
-    position:absolute;
-    right:14px;
-    bottom:calc(min(20dvh, 220px) + 14px);
-    z-index:13;
-    width:auto;
-    min-height:38px;
-    padding:8px 12px;
-    border-radius:999px;
-    border:1px solid rgba(255,255,255,.18);
-    background:rgba(18,18,18,.72);
-    color:#fff;
-    font-size:12px;
-    font-weight:800;
-    line-height:1;
-    backdrop-filter:blur(8px);
-  }
 
   #app.map-hidden #miniMapShell {
     display:none;
   }
 
-  #app.map-hidden #miniMapToggleBtn {
-    bottom:max(18px, env(safe-area-inset-bottom));
-  }
 
   #app.map-hidden #controls {
     bottom:max(18px, env(safe-area-inset-bottom));
@@ -1014,6 +1028,77 @@
     #miniMapShell { max-height: 160px; }
   }
 
+
+  .hud-icon-btn {
+    position:absolute;
+    right:12px;
+    top:50%;
+    transform:translateY(-50%);
+    width:42px;
+    height:42px;
+    min-width:42px;
+    min-height:42px;
+    padding:0;
+    border-radius:14px;
+    border:1px solid rgba(255,255,255,.18);
+    background:rgba(16,20,28,.66);
+    color:#fff;
+    display:grid;
+    place-items:center;
+    backdrop-filter:blur(12px);
+    -webkit-backdrop-filter:blur(12px);
+    box-shadow:0 4px 18px rgba(0,0,0,.18);
+    z-index:4;
+  }
+  .hud-icon-btn svg {
+    width:22px;
+    height:22px;
+    fill:none;
+    stroke:currentColor;
+    stroke-width:1.8;
+    stroke-linecap:round;
+    stroke-linejoin:round;
+  }
+  .hud-icon-btn.map-off {
+    opacity:.72;
+  }
+
+  #controlsToggleBtn {
+    position:absolute;
+    right:14px;
+    top:calc(max(16px, env(safe-area-inset-top)) + 56px);
+    z-index:31;
+    width:42px;
+    height:42px;
+    min-width:42px;
+    min-height:42px;
+    padding:0;
+    border-radius:14px;
+    border:1px solid rgba(255,255,255,.18);
+    background:rgba(16,20,28,.68);
+    color:#fff;
+    display:grid;
+    place-items:center;
+    backdrop-filter:blur(12px);
+    -webkit-backdrop-filter:blur(12px);
+    box-shadow:0 4px 18px rgba(0,0,0,.18);
+  }
+  #controlsToggleBtn svg {
+    width:21px;
+    height:21px;
+    fill:none;
+    stroke:currentColor;
+    stroke-width:2;
+    stroke-linecap:round;
+    stroke-linejoin:round;
+    transition:transform .2s ease;
+  }
+  #app.controls-hidden #controls {
+    display:none;
+  }
+  #app.controls-hidden #controlsToggleBtn svg {
+    transform:rotate(180deg);
+  }
 </style>
 </head>
 <body>
@@ -1046,7 +1131,7 @@
 
   <div id="topStatus">
     <div class="pill" id="gpsStatus">GPS 대기</div>
-    <div class="pill" id="versionLabel">v7.4</div>
+    <div class="pill" id="versionLabel">v7.5.1</div>
     <div class="pill" id="headingStatus">방향 대기</div>
   </div>
 
@@ -1068,13 +1153,25 @@
 
   <div id="edgeHint"></div>
   <div id="sensorToast" role="status" aria-live="polite"></div>
-  <div id="debug"></div>
+  <div id="debug">
+    <button id="miniMapToggleBtn" class="hud-icon-btn" type="button"
+      aria-label="지도 숨기기" aria-pressed="false" title="지도 숨기기">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M3.5 5.8 8.8 3l6.4 2.8L20.5 3v15.2L15.2 21l-6.4-2.8-5.3 2.8V5.8Z"></path>
+        <path d="M8.8 3v15.2M15.2 5.8V21"></path>
+      </svg>
+    </button>
+</div>
 
   <button id="mapTargetBtn" type="button">목표 변경</button>
+  <button id="controlsToggleBtn" type="button"
+    aria-label="하단 조작부 숨기기" aria-pressed="false" title="하단 조작부 숨기기">
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M6 9l6 6 6-6"></path>
+    </svg>
+  </button>
 
-  <button id="miniMapToggleBtn" type="button" aria-pressed="false">지도 숨기기</button>
-
-  <div id="miniMapShell" aria-label="현재 위치 2D 지도">
+<div id="miniMapShell" aria-label="현재 위치 2D 지도">
     <div id="miniMapRotator"><div id="miniMap"></div></div>
     <div id="miniMapDragLayer" aria-hidden="true"></div>
     <div id="miniMapSegmentBadge">지도 준비 중</div>
@@ -1265,6 +1362,7 @@
   const targetCoordText = document.getElementById('targetCoordText');
   const miniMapShell = document.getElementById('miniMapShell');
   const miniMapToggleBtn = document.getElementById('miniMapToggleBtn');
+  const controlsToggleBtn = document.getElementById('controlsToggleBtn');
   const miniMapRotator = document.getElementById('miniMapRotator');
   const miniMapDragLayer = document.getElementById('miniMapDragLayer');
   const miniMapSegmentBadge = document.getElementById('miniMapSegmentBadge');
@@ -1276,6 +1374,7 @@
   let miniMap = null;
   let miniMapReady = false;
   let miniMapVisible = true;
+  let controlsVisible = true;
   let miniMapUserOverlay = null;
   let miniMapUserMarkerEl = null;
   let miniMapHeadingDeg = 0;
@@ -2629,7 +2728,7 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
       ? new kakao.maps.LatLng(currentPos.latitude,currentPos.longitude)
       : new kakao.maps.LatLng(MINI_MAP_ROUTE_POINTS[0].lat,MINI_MAP_ROUTE_POINTS[0].lng);
 
-    miniMap=new kakao.maps.Map(document.getElementById('miniMap'),{center:start,level:2});
+    miniMap=new kakao.maps.Map(document.getElementById('miniMap'),{center:start,level:3});
     // CSS로 지도 전체를 heading에 맞춰 회전시키기 때문에
     // 카카오 기본 drag를 쓰면 입력 방향까지 지도 좌표계에 종속된다.
     // 기본 drag는 끄고 아래의 화면좌표 기반 custom drag를 사용한다.
@@ -2671,12 +2770,28 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
     requestAnimationFrame(()=>kakao.maps.event.trigger(miniMap,'resize'));
   }
 
+  function setControlsVisible(visible){
+    controlsVisible = !!visible;
+    app.classList.toggle('controls-hidden', !controlsVisible);
+    controlsToggleBtn.setAttribute('aria-pressed', controlsVisible ? 'false' : 'true');
+    controlsToggleBtn.setAttribute(
+      'aria-label',
+      controlsVisible ? '하단 조작부 숨기기' : '하단 조작부 보기'
+    );
+    controlsToggleBtn.setAttribute(
+      'title',
+      controlsVisible ? '하단 조작부 숨기기' : '하단 조작부 보기'
+    );
+  }
+
   function setMiniMapVisible(visible){
     miniMapVisible = !!visible;
     app.classList.toggle('map-hidden', !miniMapVisible);
 
-    miniMapToggleBtn.textContent = miniMapVisible ? '지도 숨기기' : '지도 보기';
     miniMapToggleBtn.setAttribute('aria-pressed', miniMapVisible ? 'false' : 'true');
+    miniMapToggleBtn.setAttribute('aria-label', miniMapVisible ? '지도 숨기기' : '지도 보기');
+    miniMapToggleBtn.setAttribute('title', miniMapVisible ? '지도 숨기기' : '지도 보기');
+    miniMapToggleBtn.classList.toggle('map-off', !miniMapVisible);
 
     if(miniMapVisible){
       requestAnimationFrame(()=>{
@@ -2787,8 +2902,16 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
     });
 
     if(miniMapUserMarkerEl){
+      const counter = -miniMapHeadingDeg.toFixed(2);
       miniMapUserMarkerEl.style.transform =
-        `rotate(${-miniMapHeadingDeg.toFixed(2)}deg) scale(${inverseScale})`;
+        `rotate(${counter}deg) scale(${inverseScale})`;
+
+      // 마커 본체는 정방향으로 유지하되, 반원형 방향 fan은
+      // 실제 사용자가 바라보는 화면 상단 방향을 가리키도록 다시 보정.
+      miniMapUserMarkerEl.style.setProperty(
+        '--marker-counter-rotation',
+        `${miniMapHeadingDeg.toFixed(2)}deg`
+      );
     }
   }
 
@@ -2977,6 +3100,10 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
     setMiniMapVisible(!miniMapVisible);
   });
 
+  controlsToggleBtn.addEventListener('click',()=>{
+    setControlsVisible(!controlsVisible);
+  });
+
   miniMapZoomInBtn.addEventListener('click',()=>{
     if(!miniMapReady || !miniMap) return;
     miniMapFollowResumeAt = Date.now() + MINI_MAP_FOLLOW_RESUME_MS;
@@ -3029,6 +3156,7 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
   }
 
   installMiniMapScreenDrag();
+  setControlsVisible(true);
   setMiniMapVisible(true);
   ensureMiniMap();
 
