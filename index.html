@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-<title>AR Navigation v7.3</title>
+<title>AR Navigation v7.4</title>
+<meta name="theme-color" content="#0b0d10">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
   crossorigin="">
 
@@ -556,6 +557,463 @@
   #bottomHud { bottom:calc(max(96px, calc(env(safe-area-inset-bottom) + 96px)) + min(20dvh, 220px)); }
   #sensorToast { bottom:calc(max(150px, calc(env(safe-area-inset-bottom) + 150px)) + min(20dvh, 220px)); }
 
+
+
+  /* ===== v7.4 Mobile Navigation UI Polish ===== */
+  :root {
+    --ui-bg: rgba(13,16,21,.78);
+    --ui-bg-strong: rgba(10,12,16,.90);
+    --ui-border: rgba(255,255,255,.13);
+    --ui-border-strong: rgba(255,255,255,.22);
+    --ui-text: #f7f9fc;
+    --ui-muted: rgba(247,249,252,.68);
+    --ui-accent: #2f8dff;
+    --ui-accent-strong: #1677ff;
+    --ui-radius: 18px;
+    --ui-shadow: 0 10px 34px rgba(0,0,0,.30);
+  }
+
+  html, body, button {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  button {
+    font-family: inherit;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: manipulation;
+  }
+
+  button:focus-visible {
+    outline: 2px solid rgba(132,190,255,.95);
+    outline-offset: 2px;
+  }
+
+  button:active:not(:disabled) {
+    transform: scale(.975);
+  }
+
+  button:disabled {
+    opacity: .34;
+    cursor: default;
+  }
+
+  #shade {
+    background:
+      linear-gradient(to bottom,
+        rgba(0,0,0,.42) 0%,
+        rgba(0,0,0,.12) 17%,
+        rgba(0,0,0,0) 46%,
+        rgba(0,0,0,.03) 63%,
+        rgba(0,0,0,.40) 100%);
+  }
+
+  #topStatus {
+    top: max(12px, calc(env(safe-area-inset-top) + 8px));
+    left: 12px;
+    right: 12px;
+    gap: 6px;
+  }
+
+  .pill {
+    min-height: 32px;
+    display: flex;
+    align-items: center;
+    padding: 0 11px;
+    border-radius: 12px;
+    background: var(--ui-bg);
+    border: 1px solid var(--ui-border);
+    box-shadow: 0 4px 14px rgba(0,0,0,.16);
+    backdrop-filter: blur(18px) saturate(1.15);
+    -webkit-backdrop-filter: blur(18px) saturate(1.15);
+    color: var(--ui-text);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: -.1px;
+  }
+
+  #versionLabel {
+    min-height: 26px;
+    padding: 0 8px;
+    border-radius: 9px;
+    font-size: 10px;
+    opacity: .76;
+  }
+
+  #mapTargetBtn,
+  #miniMapToggleBtn {
+    min-height: 42px;
+    padding: 0 14px;
+    border-radius: 14px;
+    border: 1px solid var(--ui-border);
+    background: var(--ui-bg);
+    color: var(--ui-text);
+    box-shadow: 0 8px 22px rgba(0,0,0,.22);
+    backdrop-filter: blur(18px) saturate(1.15);
+    -webkit-backdrop-filter: blur(18px) saturate(1.15);
+    font-size: 12px;
+    font-weight: 750;
+  }
+
+  #mapTargetBtn {
+    top: max(56px, calc(env(safe-area-inset-top) + 52px));
+    right: 12px;
+  }
+
+  #bottomHud {
+    width: min(calc(100vw - 24px), 440px);
+    bottom: calc(max(82px, env(safe-area-inset-bottom) + 82px) + min(20dvh, 220px));
+    text-shadow: none;
+  }
+
+  #distBlock {
+    width: 100%;
+    align-items: stretch;
+    gap: 7px;
+    padding: 13px 14px 14px;
+    border: 1px solid var(--ui-border-strong);
+    border-radius: 20px;
+    background: linear-gradient(180deg, rgba(18,22,29,.88), rgba(10,13,18,.78));
+    box-shadow: var(--ui-shadow);
+    backdrop-filter: blur(20px) saturate(1.2);
+    -webkit-backdrop-filter: blur(20px) saturate(1.2);
+  }
+
+  #navCardHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-width: 0;
+  }
+
+  #goalLabel {
+    max-width: 54%;
+    padding: 0;
+    border: 0;
+    background: none;
+    backdrop-filter: none;
+    color: rgba(205,226,255,.92);
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: .1px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  #distanceGroup {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 0 0 auto;
+  }
+
+  #distPin {
+    width: 16px;
+    height: 19px;
+    filter: drop-shadow(0 2px 4px rgba(0,0,0,.18));
+  }
+
+  #distValue {
+    color: #fff;
+    font-size: 20px;
+    line-height: 1;
+    font-weight: 850;
+    letter-spacing: -.5px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  #guideText {
+    color: var(--ui-text);
+    font-size: 15px;
+    line-height: 1.35;
+    font-weight: 780;
+    letter-spacing: -.25px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  #controls {
+    left: 12px;
+    right: 12px;
+    bottom: calc(max(10px, env(safe-area-inset-bottom)) + min(20dvh, 220px));
+    gap: 7px;
+    padding: 7px;
+    border: 1px solid var(--ui-border);
+    border-radius: 20px;
+    background: rgba(10,12,16,.76);
+    box-shadow: 0 10px 28px rgba(0,0,0,.30);
+    backdrop-filter: blur(22px) saturate(1.18);
+    -webkit-backdrop-filter: blur(22px) saturate(1.18);
+  }
+
+  #controls button {
+    min-height: 48px;
+    border-radius: 14px;
+    padding: 0 11px;
+    border: 1px solid rgba(255,255,255,.10);
+    box-shadow: none;
+    font-size: 13px;
+    font-weight: 800;
+    transition: transform .12s ease, opacity .12s ease, background .12s ease;
+  }
+
+  #controls button.secondary {
+    flex: 0 1 76px;
+    background: rgba(255,255,255,.07);
+    color: rgba(255,255,255,.90);
+    border-color: rgba(255,255,255,.08);
+  }
+
+  #startBtn {
+    flex: 1.45;
+    background: #fff;
+    color: #101318;
+    border-color: rgba(255,255,255,.78) !important;
+  }
+
+  #debugBtn {
+    flex: 0 1 64px !important;
+  }
+
+  #miniMapShell {
+    border-top: 1px solid rgba(255,255,255,.55);
+    border-radius: 22px 22px 0 0;
+    box-shadow: 0 -12px 34px rgba(0,0,0,.30);
+    background: #e8edf2;
+  }
+
+  #miniMapSegmentBadge {
+    left: 12px;
+    top: 11px;
+    min-height: 34px;
+    display: flex;
+    align-items: center;
+    padding: 0 11px;
+    border-radius: 12px;
+    background: rgba(18,21,26,.78);
+    border: 1px solid rgba(255,255,255,.20);
+    box-shadow: 0 5px 16px rgba(0,0,0,.18);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    font-size: 11px;
+    font-weight: 800;
+  }
+
+  #miniMapControls {
+    top: 10px;
+    right: 10px;
+    gap: 5px;
+    padding: 4px;
+    border-radius: 14px;
+    background: rgba(18,21,26,.74);
+    border: 1px solid rgba(255,255,255,.18);
+    box-shadow: 0 5px 18px rgba(0,0,0,.20);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+  }
+
+  #miniMapControls button {
+    width: 40px;
+    height: 40px;
+    min-height: 40px;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: #fff;
+    font-size: 19px;
+    font-weight: 750;
+  }
+
+  #miniMapControls button:active:not(:disabled) {
+    background: rgba(255,255,255,.11);
+  }
+
+  #miniMapCloseBtn {
+    padding: 0 14px !important;
+    background: rgba(255,255,255,.10) !important;
+  }
+
+  #miniMapToggleBtn {
+    right: 12px;
+    bottom: calc(min(20dvh, 220px) + 12px);
+  }
+
+  .mini-route-number {
+    width: 30px;
+    height: 30px;
+    border: 2.5px solid #fff;
+    background: #222833;
+    box-shadow: 0 3px 10px rgba(0,0,0,.28);
+    font-size: 12px;
+    font-weight: 850;
+  }
+
+  .mini-route-number.active {
+    background: var(--ui-accent-strong);
+    box-shadow: 0 0 0 5px rgba(22,119,255,.18), 0 3px 10px rgba(0,0,0,.28);
+  }
+
+  .mini-map-user-marker {
+    width: 20px;
+    height: 20px;
+    background: var(--ui-accent-strong);
+    border: 3px solid #fff;
+    box-shadow: 0 2px 9px rgba(0,0,0,.32), 0 0 0 1px rgba(0,76,190,.25);
+  }
+
+  #sensorToast {
+    max-width: min(calc(100vw - 32px), 430px);
+    bottom: calc(max(142px, env(safe-area-inset-bottom) + 142px) + min(20dvh, 220px));
+    border-radius: 16px;
+    background: rgba(14,17,22,.90);
+    border: 1px solid var(--ui-border-strong);
+    box-shadow: var(--ui-shadow);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+
+  #edgeHint {
+    border-radius: 14px;
+    background: rgba(13,16,21,.82);
+    border-color: var(--ui-border);
+    box-shadow: 0 6px 20px rgba(0,0,0,.22);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+  }
+
+  #debug {
+    left: 12px;
+    right: 12px;
+    bottom: calc(max(80px, env(safe-area-inset-bottom) + 80px) + min(20dvh, 220px));
+    max-height: 42dvh;
+    overflow: auto;
+    padding: 12px 13px;
+    border: 1px solid var(--ui-border);
+    border-radius: 16px;
+    background: rgba(8,10,13,.88);
+    box-shadow: var(--ui-shadow);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    font-size: 10px;
+  }
+
+  #targetMapModal {
+    background: #0b0d10;
+  }
+
+  #targetMapHeader,
+  #targetMapFooter {
+    background: rgba(11,13,16,.96);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+
+  #targetMapHeader {
+    padding: max(14px, calc(env(safe-area-inset-top) + 10px)) 16px 13px;
+    border-bottom: 1px solid rgba(255,255,255,.08);
+  }
+
+  #targetMapTitle strong {
+    font-size: 17px;
+    letter-spacing: -.3px;
+  }
+
+  #targetMapTitle span {
+    margin-top: 4px;
+    font-size: 12px;
+    color: var(--ui-muted);
+    opacity: 1;
+  }
+
+  #targetMapClose {
+    min-width: 56px;
+    min-height: 42px;
+    border-radius: 13px;
+    background: rgba(255,255,255,.08);
+  }
+
+  #targetMapFooter {
+    padding: 12px 14px max(14px, calc(env(safe-area-inset-bottom) + 10px));
+    border-top: 1px solid rgba(255,255,255,.08);
+  }
+
+  #targetCoordText {
+    color: rgba(255,255,255,.78);
+    font-variant-numeric: tabular-nums;
+  }
+
+  #targetMapConfirm {
+    min-height: 46px;
+    padding: 0 16px;
+    border-radius: 14px;
+    background: var(--ui-accent-strong);
+    color: #fff;
+  }
+
+  #miniMapShell.fullscreen {
+    border-radius: 0;
+    border: 0;
+    box-shadow: none;
+  }
+
+  #miniMapShell.fullscreen #miniMapControls {
+    top: max(10px, calc(env(safe-area-inset-top) + 8px));
+    right: 10px;
+  }
+
+  #miniMapShell.fullscreen #miniMapSegmentBadge {
+    top: max(11px, calc(env(safe-area-inset-top) + 9px));
+  }
+
+  #app.map-hidden #miniMapToggleBtn {
+    bottom: max(12px, calc(env(safe-area-inset-bottom) + 8px));
+  }
+
+  #app.map-hidden #controls {
+    bottom: max(10px, calc(env(safe-area-inset-bottom) + 6px));
+  }
+
+  #app.map-hidden #bottomHud {
+    bottom: max(82px, calc(env(safe-area-inset-bottom) + 82px));
+  }
+
+  #app.map-hidden #sensorToast {
+    bottom: max(144px, calc(env(safe-area-inset-bottom) + 144px));
+  }
+
+  #app.map-hidden #debug {
+    bottom: max(80px, calc(env(safe-area-inset-bottom) + 80px));
+  }
+
+  @media (max-width: 380px) {
+    #topStatus { left: 8px; right: 8px; }
+    .pill { padding: 0 8px; font-size: 10px; }
+    #controls { left: 8px; right: 8px; gap: 5px; padding: 5px; }
+    #controls button { padding: 0 7px; font-size: 12px; }
+    #controls button.secondary { flex-basis: 66px; }
+    #debugBtn { flex-basis: 56px !important; }
+    #bottomHud { width: calc(100vw - 16px); }
+    #distBlock { padding: 11px 12px 12px; border-radius: 17px; }
+    #guideText { font-size: 14px; }
+    #distValue { font-size: 18px; }
+  }
+
+  @media (orientation: landscape) and (max-height: 520px) {
+    #bottomHud {
+      left: 12px;
+      transform: none;
+      width: min(320px, 42vw);
+      bottom: calc(max(70px, env(safe-area-inset-bottom) + 70px) + min(20dvh, 160px));
+    }
+    #distBlock { padding: 10px 12px; }
+    #guideText { font-size: 13px; }
+    #controls { right: 12px; left: auto; width: min(430px, 56vw); }
+    #miniMapShell { max-height: 160px; }
+  }
+
 </style>
 </head>
 <body>
@@ -588,18 +1046,23 @@
 
   <div id="topStatus">
     <div class="pill" id="gpsStatus">GPS 대기</div>
-    <div class="pill" id="versionLabel">v7.3</div>
+    <div class="pill" id="versionLabel">v7.4</div>
     <div class="pill" id="headingStatus">방향 대기</div>
   </div>
 
   <div id="bottomHud">
     <div id="distBlock">
-      <div id="goalLabel">목표 1 / 8</div>
-      <svg id="distPin" viewBox="0 0 24 28">
-        <path d="M12 0C5.4 0 0 5.3 0 11.8 0 20.5 12 28 12 28s12-7.5 12-16.2C24 5.3 18.6 0 12 0z" fill="#ff8a1e"></path>
-        <path d="M12 2.6c-5.1 0-9.2 4.1-9.2 9.2 0 6.8 9.2 13.2 9.2 13.2s9.2-6.4 9.2-13.2c0-5.1-4.1-9.2-9.2-9.2z" fill="#ffab52"></path>
-      </svg>
-      <div id="distValue">-</div>
+      <div id="navCardHeader">
+        <div id="goalLabel">목표 1 / 8</div>
+        <div id="distanceGroup">
+          <svg id="distPin" viewBox="0 0 24 28" aria-hidden="true">
+            <path d="M12 0C5.4 0 0 5.3 0 11.8 0 20.5 12 28 12 28s12-7.5 12-16.2C24 5.3 18.6 0 12 0z" fill="#ff8a1e"></path>
+            <path d="M12 2.6c-5.1 0-9.2 4.1-9.2 9.2 0 6.8 9.2 13.2 9.2 13.2s9.2-6.4 9.2-13.2c0-5.1-4.1-9.2-9.2-9.2z" fill="#ffab52"></path>
+          </svg>
+          <div id="distValue">-</div>
+        </div>
+      </div>
+      <div id="guideText">경로를 준비하고 있습니다</div>
     </div>
   </div>
 
@@ -624,10 +1087,10 @@
   </div>
 
   <div id="controls">
-    <button id="prevTargetBtn" class="secondary">이전 목표</button>
-    <button id="startBtn">카메라 · 위치 · 방향 시작</button>
-    <button id="nextTargetBtn" class="secondary">다음 목표</button>
-    <button id="debugBtn" class="secondary">정보</button>
+    <button id="prevTargetBtn" class="secondary">‹ 이전</button>
+    <button id="startBtn">내비 시작</button>
+    <button id="nextTargetBtn" class="secondary">다음 ›</button>
+    <button id="debugBtn" class="secondary">상태</button>
   </div>
 </div>
 
@@ -783,6 +1246,7 @@
 
   const distValue = document.getElementById('distValue');
   const goalLabel = document.getElementById('goalLabel');
+  const guideText = document.getElementById('guideText');
   const edgeHint = document.getElementById('edgeHint');
   const sensorToast = document.getElementById('sensorToast');
 
@@ -1156,7 +1620,8 @@
   }
 
   function updateTargetUi(){
-    goalLabel.textContent = `${getActiveTarget().name} / ${TARGETS.length} · ${getActiveTarget().guide}`;
+    goalLabel.textContent = `${getActiveTarget().name} / ${TARGETS.length}`;
+    guideText.textContent = getActiveTarget().guide || '다음 지점으로 이동하세요';
     prevTargetBtn.disabled = targetIndex <= 0;
     nextTargetBtn.disabled = targetIndex >= TARGETS.length - 1;
   }
