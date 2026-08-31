@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-<title>AR Navigation v7.9.1</title>
+<title>AR Navigation v8.2</title>
 <meta name="theme-color" content="#0b0d10">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
   crossorigin="">
@@ -148,54 +148,40 @@
     left:50%;
     bottom:calc(max(96px, calc(env(safe-area-inset-bottom) + 96px)) + min(20dvh, 220px));
     transform:translateX(-50%);
-    width:min(92vw, 440px);
-    min-height:74px;
-    padding:8px;
-    border:0;
-    border-radius:20px;
-    background:rgba(9,13,19,.42);
-    box-shadow:0 8px 26px rgba(0,0,0,.16);
-    backdrop-filter:blur(14px) saturate(1.08);
-    -webkit-backdrop-filter:blur(14px) saturate(1.08);
+    width:min(94vw, 460px);
+    min-height:78px;
+    padding:9px 9px 9px 10px;
+    border-radius:18px;
+    border:1px solid rgba(255,255,255,.13);
+    background:
+      linear-gradient(180deg, rgba(18,22,29,.80), rgba(8,11,16,.72));
+    box-shadow:
+      0 10px 28px rgba(0,0,0,.24),
+      inset 0 1px 0 rgba(255,255,255,.06);
+    backdrop-filter:blur(18px) saturate(1.12);
+    -webkit-backdrop-filter:blur(18px) saturate(1.12);
     z-index:15;
     display:flex;
     align-items:center;
-    gap:8px;
+    gap:10px;
     color:#fff;
   }
 
-  #distBlock {
-    min-width:0;
-    flex:1;
-    display:flex;
-    align-items:center;
-    gap:10px;
-    padding:0;
-    border:0;
-    border-radius:0;
-    background:transparent;
-    backdrop-filter:none;
-    -webkit-backdrop-filter:none;
-  }
   #goalLabel {
-    min-width:0;
-    color:rgba(214,229,247,.72);
+    color:rgba(190,213,242,.78);
     font-size:11px;
-    line-height:1.1;
-    font-weight:750;
+    line-height:1;
+    font-weight:760;
     letter-spacing:.01em;
     white-space:nowrap;
-    overflow:hidden;
-    text-overflow:ellipsis;
   }
 
   #distValue {
-    flex:0 0 auto;
-    color:#fff;
-    font-size:22px;
+    color:rgba(255,255,255,.96);
+    font-size:13px;
     line-height:1;
-    font-weight:850;
-    letter-spacing:-.045em;
+    font-weight:800;
+    letter-spacing:-.02em;
     font-variant-numeric:tabular-nums;
     white-space:nowrap;
   }
@@ -648,19 +634,6 @@
   }
 
   #mapTargetBtn,
-  #miniMapToggleBtn {
-    min-height: 42px;
-    padding: 0 14px;
-    border-radius: 14px;
-    border: 1px solid var(--ui-border);
-    background: var(--ui-bg);
-    color: var(--ui-text);
-    box-shadow: 0 8px 22px rgba(0,0,0,.22);
-    backdrop-filter: blur(18px) saturate(1.15);
-    -webkit-backdrop-filter: blur(18px) saturate(1.15);
-    font-size: 12px;
-    font-weight: 750;
-  }
 
   #mapTargetBtn {
     top: max(56px, calc(env(safe-area-inset-top) + 52px));
@@ -715,11 +688,11 @@
 
   #guideText {
     min-width:0;
-    color:rgba(255,255,255,.94);
-    font-size:14px;
-    line-height:1.3;
-    font-weight:760;
-    letter-spacing:-.025em;
+    color:#fff;
+    font-size:16px;
+    line-height:1.25;
+    font-weight:820;
+    letter-spacing:-.03em;
     white-space:nowrap;
     overflow:hidden;
     text-overflow:ellipsis;
@@ -826,10 +799,6 @@
     background: rgba(255,255,255,.10) !important;
   }
 
-  #miniMapToggleBtn {
-    right: 12px;
-    bottom: calc(min(20dvh, 220px) + 12px);
-  }
 
   .mini-route-number {
     width: 30px;
@@ -1006,26 +975,27 @@
 
 
   .hud-icon-btn {
-    position:relative;
-    right:auto;
-    top:auto;
-    transform:none;
-    flex:0 0 44px;
-    width:44px;
-    height:58px;
-    min-width:44px;
-    min-height:58px;
+    position:static !important;
+    inset:auto !important;
+    transform:none !important;
+    flex:0 0 46px;
+    width:46px;
+    height:46px;
+    min-width:46px;
+    min-height:46px;
+    max-width:46px;
+    max-height:46px;
+    margin:0;
     padding:0;
-    border-radius:15px;
+    align-self:center;
+    border-radius:14px;
     border:1px solid rgba(255,255,255,.10);
     background:rgba(255,255,255,.07);
-    color:rgba(255,255,255,.90);
+    color:rgba(255,255,255,.88);
     display:grid;
     place-items:center;
-    backdrop-filter:none;
-    -webkit-backdrop-filter:none;
-    box-shadow:inset 0 1px 0 rgba(255,255,255,.04);
-    z-index:4;
+    box-shadow:none;
+    z-index:auto;
   }
   .hud-icon-btn svg {
     width:22px;
@@ -1086,78 +1056,28 @@
   }
 
   .hud-icon-btn:active {
-    transform:scale(.96);
+    transform:scale(.96) !important;
     background:rgba(255,255,255,.12);
   }
 
-  #stepMarker {
-    position:relative;
-    flex:0 0 48px;
-    width:48px;
-    height:54px;
-    display:grid;
-    place-items:start center;
-    filter:drop-shadow(0 5px 12px rgba(0,0,0,.20));
-  }
 
-  #stepMarker svg {
-    position:absolute;
-    inset:0;
-    width:48px;
-    height:54px;
-    overflow:visible;
-  }
 
-  #stepMarker svg path {
-    fill:rgba(28,135,255,.96);
-    stroke:rgba(255,255,255,.88);
-    stroke-width:1.6;
-  }
 
-  #stepNumbers {
-    position:relative;
-    z-index:2;
-    margin-top:10px;
-    display:flex;
-    align-items:baseline;
-    justify-content:center;
-    color:#fff;
-    font-variant-numeric:tabular-nums;
-    line-height:1;
-  }
 
-  #stepCurrent {
-    font-size:22px;
-    font-weight:900;
-    letter-spacing:-.06em;
-  }
 
-  #stepTotal {
-    margin-left:2px;
-    font-size:10px;
-    font-weight:750;
-    color:rgba(255,255,255,.68);
-    letter-spacing:-.02em;
-  }
 
   #navInfo {
     min-width:0;
     flex:1;
     display:grid;
-    gap:5px;
+    gap:6px;
+    align-content:center;
   }
 
-  #navMeta {
-    min-width:0;
-    display:flex;
-    align-items:flex-end;
-    justify-content:space-between;
-    gap:10px;
-  }
 
   #miniMapToggleBtn.map-off {
     color:rgba(255,255,255,.54);
-    background:rgba(255,255,255,.045);
+    background:rgba(8,12,18,.28);
   }
 
   #miniMapToggleBtn.map-off svg {
@@ -1191,6 +1111,78 @@
     font-weight:750;
     color:rgba(255,255,255,.94);
   }
+
+  #navCompass {
+    position:relative;
+    flex:0 0 54px;
+    width:54px;
+    height:54px;
+    display:grid;
+    place-items:center;
+    overflow:visible;
+  }
+
+  #navCompassGlow {
+    position:absolute;
+    left:50%;
+    top:3px;
+    width:20px;
+    height:44px;
+    transform:translateX(-50%);
+    border-radius:999px;
+    background:linear-gradient(
+      180deg,
+      rgba(61,197,255,.78) 0%,
+      rgba(42,135,255,.28) 48%,
+      rgba(50,73,255,0) 100%
+    );
+    filter:blur(7px);
+    opacity:.82;
+  }
+
+  #navCompass svg {
+    position:relative;
+    z-index:2;
+    width:42px;
+    height:42px;
+    overflow:visible;
+    filter:drop-shadow(0 3px 5px rgba(0,0,0,.30));
+  }
+
+  #navCompass svg path {
+    fill:#f8fbff;
+    stroke:rgba(200,224,255,.92);
+    stroke-width:1.25;
+    stroke-linejoin:round;
+  }
+
+  #navSubInfo {
+    display:flex;
+    align-items:center;
+    gap:9px;
+    min-width:0;
+  }
+
+  #navSubInfo::after {
+    content:"";
+  }
+
+  #navSubInfo #goalLabel {
+    position:relative;
+    padding-left:9px;
+  }
+
+  #navSubInfo #goalLabel::before {
+    content:"";
+    position:absolute;
+    left:0;
+    top:50%;
+    width:3px;
+    height:3px;
+    border-radius:50%;
+    background:rgba(255,255,255,.42);
+    transform:translateY(-50%);
+  }
 </style>
 </head>
 <body>
@@ -1223,27 +1215,23 @@
 
   <div id="topStatus">
     <div class="pill" id="gpsStatus">GPS 대기</div>
-    <div class="pill" id="versionLabel">v7.9.1</div>
+    <div class="pill" id="versionLabel">v8.2</div>
     <div class="pill" id="headingStatus">방향 대기</div>
   </div>
 
   <div id="bottomHud">
-    <div id="distBlock">
-      <div id="stepMarker" aria-label="현재 스텝">
-        <svg viewBox="0 0 44 50" aria-hidden="true">
-          <path d="M22 1.5C11.1 1.5 2.5 10 2.5 20.6c0 13.8 19.5 27.9 19.5 27.9s19.5-14.1 19.5-27.9C41.5 10 32.9 1.5 22 1.5Z"></path>
-        </svg>
-        <div id="stepNumbers">
-          <span id="stepCurrent">1</span><span id="stepTotal">/8</span>
-        </div>
-      </div>
+    <div id="navCompass" aria-hidden="true">
+      <div id="navCompassGlow"></div>
+      <svg viewBox="0 0 48 48">
+        <path d="M24 4.5 41 37.5c1.2 2.4-1.4 4.9-3.8 3.7L24 34.2l-13.2 7c-2.4 1.2-5-1.3-3.8-3.7L24 4.5Z"></path>
+      </svg>
+    </div>
 
-      <div id="navInfo">
-        <div id="navMeta">
-          <div id="goalLabel">목표 1</div>
-          <div id="distValue">-</div>
-        </div>
-        <div id="guideText">경로를 준비하고 있습니다</div>
+    <div id="navInfo">
+      <div id="guideText">경로를 준비하고 있습니다</div>
+      <div id="navSubInfo">
+        <div id="distValue">-</div>
+        <div id="goalLabel">Step 1/8</div>
       </div>
     </div>
 
@@ -1260,7 +1248,7 @@
   <div id="sensorToast" role="status" aria-live="polite"></div>
   <div id="debug"></div>
 
-  <button id="mapTargetBtn" type="button">목표 변경</button>
+  <button id="mapTargetBtn" type="button">내 위치 변경</button>
   <button id="controlsToggleBtn" type="button"
     aria-label="하단 조작부 숨기기" aria-pressed="false" title="하단 조작부 숨기기">
     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -1291,15 +1279,15 @@
 <div id="targetMapModal" aria-hidden="true">
   <div id="targetMapHeader">
     <div id="targetMapTitle">
-      <strong>목표 지점 변경</strong>
-      <span>지도를 터치한 뒤 ‘이 위치로 변경’을 누르세요.</span>
+      <strong>사용자 위치 변경</strong>
+      <span>지도를 터치해 테스트할 사용자 위치를 지정하세요.</span>
     </div>
     <button id="targetMapClose" type="button">닫기</button>
   </div>
   <div id="targetMap"></div>
   <div id="targetMapFooter">
-    <div id="targetCoordText">지도를 터치해 위치를 선택하세요.</div>
-    <button id="targetMapConfirm" type="button">이 위치로 변경</button>
+    <div id="targetCoordText">지도를 터치해 사용자 위치를 선택하세요.</div>
+    <button id="targetMapConfirm" type="button">이 위치로 설정</button>
   </div>
 </div>
 
@@ -1441,8 +1429,6 @@
 
   const distValue = document.getElementById('distValue');
   const goalLabel = document.getElementById('goalLabel');
-  const stepCurrent = document.getElementById('stepCurrent');
-  const stepTotal = document.getElementById('stepTotal');
   const guideText = document.getElementById('guideText');
   const edgeHint = document.getElementById('edgeHint');
   const sensorToast = document.getElementById('sensorToast');
@@ -1474,6 +1460,12 @@
   let miniMap = null;
   let miniMapReady = false;
   let miniMapVisible = true;
+
+  // 2D 지도 경로: 지나온 구간과 남은 구간을 현재 위치 기준으로 분리 표시.
+  let miniMapTraveledRoute = null;
+  let miniMapRemainingGlow = null;
+  let miniMapRemainingRoute = null;
+  let miniMapRemainingHighlight = null;
   let controlsVisible = true;
   let miniMapUserOverlay = null;
   let miniMapUserMarkerEl = null;
@@ -1503,6 +1495,7 @@
   let pendingTargetLatLng = null;
 
   let currentPos = null;
+  let manualUserPosition = null;
   let targetBearing = null;
   let targetDistance = null;
 
@@ -1824,9 +1817,7 @@
   function updateTargetUi(){
     const currentStep = targetIndex + 1;
 
-    stepCurrent.textContent = String(currentStep);
-    stepTotal.textContent = `/${TARGETS.length}`;
-    goalLabel.textContent = getActiveTarget().name;
+    goalLabel.textContent = `Step ${currentStep}/${TARGETS.length}`;
     guideText.textContent = getActiveTarget().guide || '다음 지점으로 이동하세요';
 
     prevTargetBtn.disabled = targetIndex <= 0;
@@ -2624,6 +2615,7 @@
 `목표: ${getActiveTarget().name} (${getActiveTarget().lat}, ${getActiveTarget().lon})
 초기 단계 자동판정: ${initialStageResolved ? '완료' : '대기'}
 현재: ${currentPos ? currentPos.latitude.toFixed(7)+', '+currentPos.longitude.toFixed(7) : '-'}
+위치 소스: ${manualUserPosition ? '사용자 임의 위치' : 'GPS'}
 거리: ${targetDistance != null ? targetDistance.toFixed(1)+' m' : '-'}
 유도선 길이: ${smoothedRouteLengthM.toFixed(1)} m
 GPS 상태: ${currentPos ? getGpsQuality(currentPos.accuracy).label : '수신 대기'}
@@ -2661,6 +2653,14 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
     }
 
     navigator.geolocation.watchPosition(pos=>{
+      if(manualUserPosition){
+        currentPos = {...manualUserPosition};
+        gpsStatus.textContent = '사용자 위치 · 임의 설정';
+        updateTargetFromGps();
+        updateMiniMap();
+        return;
+      }
+
       const sample = {
         latitude: pos.coords.latitude,
         longitude: pos.coords.longitude,
@@ -2744,6 +2744,60 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
       }
     }
     return best;
+  }
+
+  function getMiniMapRouteSplit(lat,lon){
+    const seg=getClosestMiniMapSegment(lat,lon);
+    if(!seg) return null;
+
+    const a=seg.a;
+    const b=seg.b;
+    const t=clamp(seg.t,0,1);
+
+    // 현재 위치를 가장 가까운 경로 선분 위의 실제 진행점으로 투영.
+    const progress={
+      lat:a.lat+(b.lat-a.lat)*t,
+      lng:a.lng+(b.lng-a.lng)*t
+    };
+
+    const traveled=[];
+    for(let i=0;i<=seg.index;i++){
+      const p=MINI_MAP_ROUTE_POINTS[i];
+      traveled.push(new kakao.maps.LatLng(p.lat,p.lng));
+    }
+    traveled.push(new kakao.maps.LatLng(progress.lat,progress.lng));
+
+    const remaining=[new kakao.maps.LatLng(progress.lat,progress.lng)];
+    for(let i=seg.index+1;i<MINI_MAP_ROUTE_POINTS.length;i++){
+      const p=MINI_MAP_ROUTE_POINTS[i];
+      remaining.push(new kakao.maps.LatLng(p.lat,p.lng));
+    }
+
+    return {seg,progress,traveled,remaining};
+  }
+
+  function updateMiniMapRouteProgress(){
+    if(!miniMapReady || !miniMap || !currentPos) return;
+    if(
+      !miniMapTraveledRoute ||
+      !miniMapRemainingGlow ||
+      !miniMapRemainingRoute ||
+      !miniMapRemainingHighlight
+    ) return;
+
+    const split=getMiniMapRouteSplit(
+      currentPos.latitude,
+      currentPos.longitude
+    );
+    if(!split) return;
+
+    // 이미 지나간 경로: 낮은 명도/투명도의 인디고-보라색.
+    miniMapTraveledRoute.setPath(split.traveled);
+
+    // 아직 가지 않은 경로: glow + 메인 + 중앙 하이라이트 3중 레이어.
+    miniMapRemainingGlow.setPath(split.remaining);
+    miniMapRemainingRoute.setPath(split.remaining);
+    miniMapRemainingHighlight.setPath(split.remaining);
   }
 
   function detectInitialTargetIndex(lat,lon){
@@ -2908,7 +2962,7 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
       content:miniMapUserMarkerEl,
       xAnchor:.5,
       yAnchor:.5,
-      zIndex:8
+      zIndex:9
     });
   }
 
@@ -2939,10 +2993,53 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
       miniMapFollowResumeAt = Date.now() + MINI_MAP_FOLLOW_RESUME_MS;
     });
 
-    new kakao.maps.Polyline({
+    const fullRoutePath=
+      MINI_MAP_ROUTE_POINTS.map(
+        p=>new kakao.maps.LatLng(p.lat,p.lng)
+      );
+
+    // 지나온 경로: 첨부 이미지처럼 어둡고 낮은 존재감의 인디고/보라.
+    miniMapTraveledRoute=new kakao.maps.Polyline({
       map:miniMap,
-      path:MINI_MAP_ROUTE_POINTS.map(p=>new kakao.maps.LatLng(p.lat,p.lng)),
-      strokeWeight:7,strokeColor:'#2563eb',strokeOpacity:.92,strokeStyle:'solid'
+      path:fullRoutePath,
+      strokeWeight:7,
+      strokeColor:'#4338CA',
+      strokeOpacity:.38,
+      strokeStyle:'solid',
+      zIndex:1
+    });
+
+    // 남은 경로 바깥 glow.
+    miniMapRemainingGlow=new kakao.maps.Polyline({
+      map:miniMap,
+      path:fullRoutePath,
+      strokeWeight:16,
+      strokeColor:'#13A8FF',
+      strokeOpacity:.16,
+      strokeStyle:'solid',
+      zIndex:2
+    });
+
+    // 남은 경로 메인 라인.
+    miniMapRemainingRoute=new kakao.maps.Polyline({
+      map:miniMap,
+      path:fullRoutePath,
+      strokeWeight:8,
+      strokeColor:'#16B8FF',
+      strokeOpacity:.96,
+      strokeStyle:'solid',
+      zIndex:3
+    });
+
+    // 중심부 밝은 하이라이트.
+    miniMapRemainingHighlight=new kakao.maps.Polyline({
+      map:miniMap,
+      path:fullRoutePath,
+      strokeWeight:3,
+      strokeColor:'#C8F3FF',
+      strokeOpacity:.92,
+      strokeStyle:'solid',
+      zIndex:4
     });
 
     MINI_MAP_ROUTE_POINTS.forEach((p,index)=>{
@@ -2956,7 +3053,7 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
         content:marker,
         xAnchor:.5,
         yAnchor:.5,
-        zIndex:4
+        zIndex:6
       });
 
       miniMapNumberMarkers.push(marker);
@@ -2965,6 +3062,7 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
     updateMiniMapActiveMarker();
     miniMapReady=true;
     ensureMiniMapUserOverlay();
+    updateMiniMapRouteProgress();
     updateMiniMapTransform();
     miniMapSegmentBadge.textContent='경로 위치 확인 중';
     requestAnimationFrame(()=>kakao.maps.event.trigger(miniMap,'resize'));
@@ -3060,6 +3158,7 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
 
       if(center) miniMap.setCenter(center);
       updateMiniMapUserOverlay();
+      updateMiniMapRouteProgress();
       updateMiniMapTransform();
     };
 
@@ -3117,8 +3216,11 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
     const lat=currentPos.latitude,lon=currentPos.longitude;
     const here=new kakao.maps.LatLng(lat,lon);
 
-    // 실제 GPS 좌표에 붙는 지도 오버레이: 드래그 시 해당 지도 좌표와 함께 이동.
+    // 실제 GPS 좌표에 붙는 지도 오버레이.
     updateMiniMapUserOverlay();
+
+    // 현재 위치의 경로 진행점을 기준으로 지나온/남은 경로를 즉시 재분할.
+    updateMiniMapRouteProgress();
 
     if(!miniMapUserInteracting && Date.now() >= miniMapFollowResumeAt){
       miniMap.setCenter(here);
@@ -3193,10 +3295,10 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
   }
 
   function openTargetMap(){
-    const target = getActiveTarget();
+    const fallbackTarget = getActiveTarget();
     const center = currentPos
       ? [currentPos.latitude, currentPos.longitude]
-      : [target.lat, target.lon];
+      : [fallbackTarget.lat, fallbackTarget.lon];
 
     targetMapModal.classList.add('show');
     targetMapModal.setAttribute('aria-hidden', 'false');
@@ -3206,8 +3308,8 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
 
       targetMap.invalidateSize(true);
 
-      // 열 때마다 현재 목표 좌표를 선택 상태로 표시한다.
-      setPendingTarget(target.lat, target.lon, false);
+      // 열 때마다 현재 사용자 위치를 선택 상태로 표시한다.
+      setPendingTarget(center[0], center[1], false);
     });
   }
 
@@ -3216,44 +3318,64 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
     targetMapModal.setAttribute('aria-hidden', 'true');
   }
 
-  function applyPendingTarget(){
+  function applyPendingUserPosition(){
     if(!pendingTargetLatLng) return;
 
-    const target = getActiveTarget();
-    target.lat = pendingTargetLatLng.lat;
-    target.lon = pendingTargetLatLng.lon;
-    target.guide = '사용자 지정 목표';
+    manualUserPosition = {
+      latitude: pendingTargetLatLng.lat,
+      longitude: pendingTargetLatLng.lon,
+      accuracy: 1
+    };
 
-    // 새 좌표를 즉시 현재 목표로 다시 계산한다.
-    targetBearing = null;
-    targetDistance = null;
-    alignedLock = false;
-    previousRawDiff = null;
-    desiredDiff = 0;
-    visualDiff = 0;
+    currentPos = {...manualUserPosition};
+
+    // 임의 위치를 기준으로 현재 단계도 다시 판정한다.
+    const detected = clamp(
+      detectInitialTargetIndex(currentPos.latitude, currentPos.longitude),
+      0,
+      TARGETS.length - 1
+    );
+
+    initialStageResolved = true;
+
     cancelStepCountdown();
     nearbyConfirmCount = 0;
     advanceConfirmCount = 0;
     nearbyToastShown = false;
     lastSnapDistance = null;
     lastSnapStrength = 0;
+    targetBearing = null;
+    targetDistance = null;
+    alignedLock = false;
+    previousRawDiff = null;
+    desiredDiff = 0;
+    visualDiff = 0;
     lastRouteLengthTs = null;
     markerScreenX = null;
     markerScreenY = null;
     markerLastTs = null;
 
-    updateTargetUi();
-    updateTargetFromGps();
+    if(detected !== targetIndex){
+      setTargetIndex(detected, 'manual-user-position');
+    }else{
+      updateTargetUi();
+      updateTargetFromGps();
+    }
+
+    updateMiniMapUserOverlay();
+    if(miniMapReady && miniMap){
+      miniMap.setCenter(
+        new kakao.maps.LatLng(currentPos.latitude, currentPos.longitude)
+      );
+    }
+    updateMiniMap();
+
     closeTargetMap();
 
-    sensorToast.classList.remove('show');
-    lastToastMessage = '';
-    sensorToast.textContent = '지도에서 선택한 위치로 목표를 변경했습니다.';
-    sensorToast.classList.add('show');
-    if(toastTimer) clearTimeout(toastTimer);
-    toastTimer = setTimeout(()=>{
-      sensorToast.classList.remove('show');
-    }, 2600);
+    showNavigationToast(
+      '사용자 위치를 선택한 지점으로 변경했습니다.',
+      2400
+    );
   }
 
   startBtn.addEventListener('click',async()=>{
@@ -3323,7 +3445,7 @@ GPS 보정 accuracy: ${currentPos ? currentPos.accuracy.toFixed(1)+' m' : '-'}
 
   mapTargetBtn.addEventListener('click', openTargetMap);
   targetMapClose.addEventListener('click', closeTargetMap);
-  targetMapConfirm.addEventListener('click', applyPendingTarget);
+  targetMapConfirm.addEventListener('click', applyPendingUserPosition);
 
   window.addEventListener('keydown',e=>{
     if(e.key === 'Escape' && miniMapShell.classList.contains('fullscreen')){
