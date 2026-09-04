@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-<title>AR Navigation v8.3.4</title>
+<title>AR Navigation v8.4</title>
 <meta name="theme-color" content="#0b0d10">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
   crossorigin="">
@@ -1193,7 +1193,7 @@
 
   <div id="topStatus">
     <div class="pill" id="gpsStatus">GPS 대기</div>
-    <div class="pill" id="versionLabel">v8.3.4</div>
+    <div class="pill" id="versionLabel">v8.4</div>
     <div class="pill" id="headingStatus">방향 대기</div>
   </div>
 
@@ -1209,7 +1209,7 @@
       <div id="guideText">경로를 준비하고 있습니다</div>
       <div id="navSubInfo">
         <div id="distValue">-</div>
-        <div id="goalLabel">Step 1/8</div>
+        <div id="goalLabel">Step 1/7</div>
       </div>
     </div>
 
@@ -1275,63 +1275,56 @@
 (() => {
   const TARGETS = [
     {
-      lat: 37.5656083,
-      lon: 126.9810115,
+      lat: 37.5654854,
+      lon: 126.9789515,
       name: '목표 1',
-      guide: '롯데문화센터까지 179m 이동'
-    },
-    {
-      lat: 37.5658893,
-      lon: 126.9805994,
-      name: '목표 2',
-      guide: '롯데문화센터 앞에서 시청삼거리까지 왼쪽길로 114m 이동(을지로)'
+      guide: '시청삼거리까지 62m 이동(을지로)'
     },
     {
       lat: 37.5658711,
-      lon: 126.9793000,
+      lon: 126.9793,
+      name: '목표 2',
+      guide: '시청삼거리에서 250m 이동'
+    },
+    {
+      lat: 37.5658679,
+      lon: 126.9821116,
       name: '목표 3',
-      guide: '시청삼거리에서 101m 이동'
+      guide: '을지로입구역 8번 출구로 진입하여 역사 내 이동'
     },
     {
-      lat: 37.5651033,
-      lon: 126.9787614,
+      lat: 37.5662906,
+      lon: 126.9909765,
       name: '목표 4',
-      guide: '횡단보도 이용'
+      guide: '을지로3가역 11번 출구까지 역사 내 이동'
     },
     {
-      lat: 37.5652114,
-      lon: 126.9784761,
+      lat: 37.56615,
+      lon: 126.9900937,
       name: '목표 5',
-      guide: '85m 이동(소공로)'
+      guide: '을지로3가역 11번 출구 진출 후 53m 이동(을지로)'
     },
     {
-      lat: 37.5651067,
-      lon: 126.9775616,
+      lat: 37.5661825,
+      lon: 126.9907003,
       name: '목표 6',
-      guide: '횡단보도 이용'
+      guide: '오봉집 앞에서 오른쪽길로 43m 이동'
     },
     {
-      lat: 37.5648400,
-      lon: 126.9775028,
+      lat: 37.565941,
+      lon: 126.9907049,
       name: '목표 7',
-      guide: '4m 이동(소공로)'
-    },
-    {
-      lat: 37.5648364,
-      lon: 126.9775617,
-      name: '목표 8',
-      guide: '시청역 6번 출구로 진입하여 역사 내 이동'
+      guide: '[도착구간-도착] 도착'
     }
   ];
   const MINI_MAP_ROUTE_POINTS = [
-    {seq:1,guideMent:'롯데문화센터까지 179m 이동',lat:37.5656083,lng:126.9810115},
-    {seq:2,guideMent:'롯데문화센터 앞에서 시청삼거리까지 왼쪽길로 114m 이동(을지로)',lat:37.5658893,lng:126.9805994},
-    {seq:3,guideMent:'시청삼거리에서 101m 이동',lat:37.5658711,lng:126.9793000},
-    {seq:4,guideMent:'횡단보도 이용',lat:37.5651033,lng:126.9787614},
-    {seq:5,guideMent:'85m 이동(소공로)',lat:37.5652114,lng:126.9784761},
-    {seq:6,guideMent:'횡단보도 이용',lat:37.5651067,lng:126.9775616},
-    {seq:7,guideMent:'4m 이동(소공로)',lat:37.5648400,lng:126.9775028},
-    {seq:8,guideMent:'시청역 6번 출구로 진입하여 역사 내 이동',lat:37.5648364,lng:126.9775617}
+    {seq:1,guideMent:'시청삼거리까지 62m 이동(을지로)',lat:37.5654854,lng:126.9789515},
+    {seq:2,guideMent:'시청삼거리에서 250m 이동',lat:37.5658711,lng:126.9793},
+    {seq:3,guideMent:'을지로입구역 8번 출구로 진입하여 역사 내 이동',lat:37.5658679,lng:126.9821116},
+    {seq:4,guideMent:'을지로3가역 11번 출구까지 역사 내 이동',lat:37.5662906,lng:126.9909765},
+    {seq:5,guideMent:'을지로3가역 11번 출구 진출 후 53m 이동(을지로)',lat:37.56615,lng:126.9900937},
+    {seq:6,guideMent:'오봉집 앞에서 오른쪽길로 43m 이동',lat:37.5661825,lng:126.9907003},
+    {seq:7,guideMent:'[도착구간-도착] 도착',lat:37.565941,lng:126.9907049}
   ];
 
 
